@@ -1,0 +1,23 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          enable-cache: false
+      - run: uv sync --locked
+      - run: uv run pre-commit run --all-files --show-diff-on-failure
+      - run: uv run pytest -q
