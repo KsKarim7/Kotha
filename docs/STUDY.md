@@ -19,3 +19,10 @@ Questions about code I haven't understood yet. Answer each one in my own words o
 | `.github/workflows/ci.yml` | 3-6 | Why do `pull_request` plus `push` to `main` cover every change without running CI twice for one branch push? | |
 | GitHub branch protection for `main` | n/a | What do `strict: true` and the `app_id` on the required `checks` status check each do? | |
 | `.pre-commit-config.yaml` | 14 | Why does `--enforce-all` matter only for files that are already committed? | |
+| `services/api/kotha/audio/convert.py` | 11-18 | Why does scaling by 32768 in both directions, with rounding and clipping, make int16 -> float32 -> int16 exact, when the blueprint's 32767 and truncation do not? | |
+| `services/api/kotha/audio/convert.py` | 12, 18 | What does the `<` in `dtype="<i2"` mean, and what would go wrong on the wire with a native-order `int16` on a big-endian machine? | |
+| `services/api/kotha/audio/convert.py` | 12 | Why does `np.frombuffer` raise `ValueError` on an odd number of bytes, and why is that enough validation here? | |
+| `services/api/kotha/audio/convert.py` | 21-26 | How does `resample_poly` turn 44.1 kHz into 16 kHz with up=160, down=441, and what does its anti-aliasing filter do at the edges of the signal? | |
+| `services/api/kotha/audio/convert.py` | 29-32 | What do `always_2d=True` and `dtype="float32"` change in what `soundfile.read` returns, and how does soundfile scale PCM_16 to float? | |
+| `tests/test_audio_convert.py` | 70-79 | Why does a 1 s signal at 16 kHz give FFT bins exactly 1 Hz apart, and why are 100 samples at each edge ignored when measuring RMS? | |
+| `pyproject.toml`, `tests/test_audio_convert.py` | 20, 22-24; 1-12 | Why does ruff sort `kotha` with the third-party imports, and how would the ruff `src` setting change that? | |
