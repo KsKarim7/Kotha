@@ -16,3 +16,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - This changelog.
 - A README describing the project and its current state, and a skeleton evaluation report.
 - Sprint notes in `docs/sprints/`.
+- Audio helpers in `kotha.audio.convert`: exact conversion between float32 and little-endian PCM16, resampling, and loading any WAV or FLAC as float32 mono 16 kHz.
