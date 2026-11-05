@@ -1,6 +1,6 @@
 # Evaluation
 
-Results for Milestone 1. Every number in this report comes from a committed evaluation run; a value that has not been measured yet is shown as [measure]. Each result states the size of the test set it used and the hardware it ran on.
+Results for Milestone 1. Every result in this report comes from a committed evaluation run; a value that has not been measured yet is shown as [measure]. Each result states the size of the test set it used and the hardware it ran on.
 
 ## Hardware
 
