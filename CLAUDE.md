@@ -12,6 +12,7 @@ Docker Compose, pytest.
 - Install: `uv sync`
 - Tests: `uv run pytest -q`
 - Lint and format check: `uv run ruff check . && uv run ruff format --check .`
+- Hooks: `uv run pre-commit run --all-files`
 - Stack: `docker compose up -d`
 
 ## How to work
