@@ -21,6 +21,7 @@ pythonpath = ["services/api"]
 
 [tool.ruff]
 line-length = 100
+src = ["services/api"]
 extend-exclude = ["docs/blueprint"]
 
 [tool.ruff.lint]

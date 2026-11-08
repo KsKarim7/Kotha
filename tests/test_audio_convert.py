@@ -3,6 +3,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import soundfile as sf
+
 from kotha.audio.convert import (
     SAMPLE_RATE_HZ,
     float_to_pcm16,
