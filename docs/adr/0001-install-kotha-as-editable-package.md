@@ -1,5 +1,5 @@
 # 0001: Install kotha as an editable package
-Status: proposed · Date: 2026-11-08
+Status: accepted · Date: 2026-11-08
 
 ## Context
 `kotha` lives at `services/api/kotha`, and the project had no build backend, so uv never
