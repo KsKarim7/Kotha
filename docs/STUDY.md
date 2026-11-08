@@ -33,3 +33,9 @@ Questions about code I haven't understood yet. Answer each one in my own words o
 | `services/api/kotha/audio/telephony.py` | 19-22 | Why does a 16,001-sample input come back as 16,002 samples before the trim, and why trim the end rather than the start? | |
 | `tests/test_audio_telephony.py` | 51-60 | Why are 200 samples ignored at each edge when measuring RMS after two resampling passes? | |
 | `pyproject.toml` | 24 | What does ruff's `src` setting change, and why does setting it replace the default `[".", "src"]` rather than add to it? | |
+| `pyproject.toml` | 11-13 | What does `[build-system]` tell a frontend such as uv or pip, and what does the `uv_build` backend produce from this repo? | |
+| `pyproject.toml` | 22-24 | How do `module-name` and `module-root` map `services/api/kotha` to the import name `kotha`, and why must `services/api/kotha/__init__.py` exist for `uv_build`? | |
+| `.venv/lib/python3.11/site-packages/kotha.pth` | 1 | How does a one-line `.pth` file make `import kotha` resolve to the repo, and why do code edits apply without reinstalling? | |
+| `uv.lock` | 84-86 | What is the difference between `source = { virtual = "." }` and `source = { editable = "." }`, and what decides which one uv writes? | |
+| `pyproject.toml` | 12 | Why do `uv sync` and `uv build` use the bundled `uv_build` even when the `<0.14.0` bound excludes the running uv, and when is the bound honoured (`--force-pep517`, pip)? | |
+| `pyproject.toml` | 31 | Why does ruff still need `src = ["services/api"]` to treat `kotha` as first-party after it is installed? | |
