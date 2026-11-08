@@ -20,7 +20,7 @@ These are planned features; none of them is built yet.
 
 ## Phone audio vs 16 kHz
 
-The two spectrograms show the same code-mixed Bangla-English utterance in the author's voice: on top as recorded at 16 kHz, below after `simulate_telephony`, a mu-law telephony simulation (not bit-exact G.711) that passes the audio through 8 kHz and back.
+The two spectrograms show the same code-mixed Bangla-English utterance in the author's voice: on top resampled to 16 kHz, below after `simulate_telephony`, a mu-law telephony simulation (not bit-exact G.711) that passes the audio through 8 kHz and back.
 Energy above the dashed 4 kHz line is strongly attenuated on the phone path, which is part of why speech recognition is harder on phone audio.
 
 ![Spectrograms of one utterance at 16 kHz and after simulated telephony](docs/img/spectrogram_telephony.png)
