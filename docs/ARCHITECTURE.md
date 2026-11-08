@@ -6,8 +6,9 @@ Kotha is at an early stage. This document describes only what exists or has been
 
 ### Internal format
 
-All audio inside Kotha is float32, mono, 16 kHz, with samples in [-1, 1]. Every module
-receives and returns arrays in this format; nothing converts audio except at the edges.
+All audio inside Kotha is float32, mono, 16 kHz, with samples in [-1, 1]. Modules exchange
+audio in this format. Sample-rate and PCM conversion happen at the edges and inside the
+telephony simulator.
 
 ### Edge formats (planned)
 
@@ -37,4 +38,4 @@ after a phone line, and returns it at 16 kHz with the same length:
   magnitude on a logarithmic scale, then decoded.
 
 It does not model codec packet loss, jitter, line noise or echo. The companding is a
-continuous mu-law curve, not the bit-exact segmented tables of a real telephone codec.
+continuous mu-law curve, not bit-exact G.711, which uses segmented tables.
