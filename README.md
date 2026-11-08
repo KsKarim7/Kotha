@@ -18,6 +18,19 @@ These are planned features; none of them is built yet.
 - An evaluation harness that measures speech recognition, intent, retrieval, latency and task completion on fixed test sets.
 - An on-prem mode in which no call data leaves the machine.
 
+## Phone audio vs 16 kHz
+
+The two spectrograms show the same code-mixed Bangla-English utterance in the author's voice: on top as recorded at 16 kHz, below after `simulate_telephony`, a mu-law telephony simulation (not bit-exact G.711) that passes the audio through 8 kHz and back.
+Energy above the dashed 4 kHz line is strongly attenuated on the phone path, which is part of why speech recognition is harder on phone audio.
+
+![Spectrograms of one utterance at 16 kHz and after simulated telephony](docs/img/spectrogram_telephony.png)
+
+Regenerate the figure from a recording with:
+
+```bash
+uv run python eval/plot_spectrograms.py <recording> --output docs/img/spectrogram_telephony.png
+```
+
 ## Fictional data
 
 Nodi Telecom and all telecom data in this repository are fictional. No real operator's name, tariffs or logo are used.
