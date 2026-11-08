@@ -26,3 +26,10 @@ Questions about code I haven't understood yet. Answer each one in my own words o
 | `services/api/kotha/audio/convert.py` | 29-32 | What do `always_2d=True` and `dtype="float32"` change in what `soundfile.read` returns, and how does soundfile scale PCM_16 to float? | |
 | `tests/test_audio_convert.py` | 70-79 | Why does a 1 s signal at 16 kHz give FFT bins exactly 1 Hz apart, and why are 100 samples at each edge ignored when measuring RMS? | |
 | `pyproject.toml`, `tests/test_audio_convert.py` | 20, 22-24; 1-12 | Why does ruff sort `kotha` with the third-party imports, and how would the ruff `src` setting change that? | |
+| `services/api/kotha/audio/telephony.py` | 12 | Why does a sign plus a 7-bit magnitude give an exact zero level and odd symmetry, when the blueprint's `round((y + 1) / 2 * 255)` gives neither? | |
+| `services/api/kotha/audio/telephony.py` | 11-13 | Why does mu-law keep the SNR of a sine roughly constant from 0.01 to 0.9 amplitude, when uniform 8-bit quantisation loses about 6 dB per halving? | |
+| `services/api/kotha/audio/telephony.py` | 12 | Why is the round trip idempotent, and why does the test still need a tolerance instead of exact equality? | |
+| `services/api/kotha/audio/telephony.py` | 19, 21 | Why does resampling to 8 kHz remove a 6 kHz tone, and what does the `resample_poly` low-pass filter do near 4 kHz? | |
+| `services/api/kotha/audio/telephony.py` | 19-22 | Why does a 16,001-sample input come back as 16,002 samples before the trim, and why trim the end rather than the start? | |
+| `tests/test_audio_telephony.py` | 51-60 | Why are 200 samples ignored at each edge when measuring RMS after two resampling passes? | |
+| `pyproject.toml` | 24 | What does ruff's `src` setting change, and why does setting it replace the default `[".", "src"]` rather than add to it? | |
