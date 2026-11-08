@@ -39,3 +39,10 @@ Questions about code I haven't understood yet. Answer each one in my own words o
 | `uv.lock` | 84-86 | What is the difference between `source = { virtual = "." }` and `source = { editable = "." }`, and what decides which one uv writes? | |
 | `pyproject.toml` | 12 | Why do `uv sync` and `uv build` use the bundled `uv_build` even when the `<0.14.0` bound excludes the running uv, and when is the bound honoured (`--force-pep517`, pip)? | |
 | `pyproject.toml` | 31 | Why does ruff still need `src = ["services/api"]` to treat `kotha` as first-party after it is installed? | |
+| `eval/plot_spectrograms.py` | 17-22 | How do `NFFT=512` and `noverlap=384` trade time resolution against frequency resolution at 16 kHz, and what would 256 or 1024 change in the figure? | |
+| `eval/plot_spectrograms.py` | 24-30 | Why must both panels share `vmin`/`vmax` taken from the original, and why is `spectrum` linear power while the image is `10 * log10` of it? | |
+| `eval/plot_spectrograms.py` | 16-30 | Why do exact-zero frames from the mu-law zero level become -inf dB, why did matplotlib draw them white, and how does `with_extremes(bad=...)` fix that? | |
+| `eval/plot_spectrograms.py` | 14, 42 | How does `Figure(...).savefig` render a PNG without pyplot, and which canvas and backend does it switch to? | |
+| `docs/img/spectrogram_telephony.png` | n/a | Why does faint energy remain between 4 and about 4.5 kHz after `simulate_telephony` (the `resample_poly` filter's transition band), and why is it dark above that? | |
+| `pyproject.toml`, `eval/` | 29, 33; all | Why does `eval/` have no `__init__.py`, how does `pythonpath = ["eval"]` let tests import `plot_spectrograms`, and why would a package named `eval` be a problem? | |
+| `eval/plot_spectrograms.py` | 45-50 | Why does `main(argv: list[str] \| None = None)` pass `argv` to `parse_args`, and how does that make the CLI testable without a subprocess? | |
