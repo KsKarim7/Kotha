@@ -1,5 +1,5 @@
 # 0003: Install CPU-only torch from the PyTorch index
-Status: proposed · Date: 2026-11-11
+Status: accepted · Date: 2026-11-11
 
 ## Context
 Silero VAD needs torch: the `silero-vad` 6.2.3 package depends on it. On Linux, PyPI's torch
