@@ -13,6 +13,8 @@ jobs:
     name: checks
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      UV_NO_GROUP: gpu
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.3

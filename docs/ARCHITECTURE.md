@@ -71,3 +71,21 @@ duration.
 
 These defaults are the blueprint's; the M2-4 hangover comparison will revisit them. VAD on
 8 kHz phone audio is planned for M9.
+
+## Speech recognition
+
+`kotha.asr.whisper.WhisperAsr` wraps faster-whisper (CTranslate2, no torch). It loads one
+model per instance and turns 16 kHz float32 audio into a `Transcript`: text, language, the
+worst segment `avg_logprob`, the highest `no_speech_prob`, and word timings.
+
+- By default it runs on CPU with int8 weights, which is also what CI tests.
+- On the local GPU it needs cuBLAS for CUDA 12 from the `gpu` dependency group and
+  `LD_LIBRARY_PATH` set before Python starts; see the "Local GPU setup" section of
+  `docs/runbook.md` and ADR 0004. `eval/asr_device_check.py` reports which compute types load
+  and transcribe on a device.
+- Every call passes `condition_on_previous_text=False`, `word_timestamps=True` and
+  `vad_filter=False`, since the turn detector has already cut the audio.
+- When Whisper returns no segments, the transcript is empty with `worst_avg_logprob` set to
+  -inf and `max_no_speech_prob` to 1.0; these are the wrapper's values, not the model's.
+
+The live model and compute type are chosen in M3-6, from WER and the device check.
