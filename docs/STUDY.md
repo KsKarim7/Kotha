@@ -78,3 +78,11 @@ Questions about code I haven't understood yet. Answer each one in my own words o
 | `services/api/kotha/asr/whisper.py` | 51-58 | What do `avg_logprob` and `no_speech_prob` measure, why take the worst segment for each, and why does an empty result report -inf and 1.0? | |
 | `services/api/kotha/asr/whisper.py` | 41-48 | How does faster-whisper's default temperature fallback (retrying with sampling when `avg_logprob` < -1.0 or the compression ratio is high) make two runs on the same audio differ? | |
 | `tests/test_asr_whisper.py` | 49-52 | How does `monkeypatch.setattr("kotha.asr.whisper.WhisperModel", ...)` replace the name the wrapper looks up, and why would patching `faster_whisper.WhisperModel` not work? | |
+| `docs/adr/0004-local-gpu-for-asr.md` | 6-11 | Why does CTranslate2 load `libcublas.so.12` by name at runtime (no `NEEDED` entry in `readelf -d`), and why must `LD_LIBRARY_PATH` be set before Python starts rather than from inside it? | |
+| `pyproject.toml` | 25-30 | How do `[dependency-groups]` and `[tool.uv] default-groups` interact, and why would a plain `uv sync` remove a group that is not a default? | |
+| `.github/workflows/ci.yml` | 16-17 | Why is `UV_NO_GROUP: gpu` set for the whole job and not only on `uv sync`, given that `uv run` also syncs default groups (inexactly)? | |
+| `pyproject.toml`, `uv.lock` | 26; all | What does the `sys_platform == 'linux'` marker do in a universal lock, and why does `nvidia-cuda-nvrtc-cu12` still come in with cuBLAS? | |
+| `docs/runbook.md` | 13-14 | Which startup files do a login shell, the VS Code terminal (`--init-file` shell integration) and VS Code's extension host read, and why does the export go after `~/.bashrc`'s interactive check? | |
+| `eval/asr_device_check.py` | 43-78 | What do the compute types float16, int8_float16 and int8 store and compute in, and why can all three run on compute capability 7.5? | |
+| `eval/asr_device_check.py` | 52-64, 98 | Why read GPU memory right after loading, and how do `del`, returning from the function and `gc.collect()` make sure one model is freed before the next loads? | |
+| `eval/asr_device_check.py` | 55-62 | Why do the transcribe times here mostly measure the temperature fallback and repetition loops (compression ratio about 20 at temperature 0), not the compute type? | |

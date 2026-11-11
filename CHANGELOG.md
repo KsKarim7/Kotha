@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A turn detector in `kotha.vad.turns` that turns 32 ms speech probabilities into speech-started and speech-ended events, with hysteresis, minimum speech, hangover and pre-roll.
 - `TurnDetector.flush()` to close a turn still open at the end of a stream, a script in `eval/` that prints the turns Silero finds in an audio file, and VAD notes in `docs/ARCHITECTURE.md`.
 - A faster-whisper ASR wrapper in `kotha.asr.whisper` that turns 16 kHz audio into a transcript with language, confidence signals and word timings, running on CPU.
+- Local GPU support for faster-whisper: cuBLAS for CUDA 12 in a `gpu` dependency group that CI skips, a setup runbook, ADR 0004, and a script in `eval/` that checks which compute types work on a device.
 
 ### Changed
 
