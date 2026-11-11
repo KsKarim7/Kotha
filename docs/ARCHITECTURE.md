@@ -39,3 +39,35 @@ after a phone line, and returns it at 16 kHz with the same length:
 
 It does not model codec packet loss, jitter, line noise or echo. The companding is a
 continuous mu-law curve, not bit-exact G.711, which uses segmented tables.
+
+## Voice activity detection
+
+### Speech probability
+
+`kotha.vad.silero.SileroVad` wraps the `silero-vad` 6.x package (the blueprint names v5). It
+runs on CPU-only torch from the PyTorch CPU index (ADR 0003), and the model weights ship inside
+the package, so nothing is downloaded at runtime. It returns one speech probability for each
+512-sample (32 ms) window at 16 kHz. The model is stateful: each call gets its own instance,
+and it is not reset between turns.
+
+### Turns
+
+`kotha.vad.turns.TurnDetector` turns those probabilities into turns. It takes any probability
+function, so its logic is tested without the model.
+
+- Hysteresis: a turn starts on a window at or above 0.5; after that, any window at or above
+  0.35 counts as speech and restarts the hangover.
+- Minimum speech is 250 ms, hangover 700 ms and pre-roll 300 ms, each rounded up to whole
+  32 ms windows.
+- `SpeechStarted` is emitted only once minimum speech is confirmed, so every start is followed
+  by exactly one `SpeechEnded` (from the hangover or from `flush()`), and shorter bursts
+  produce no events.
+- `SpeechEnded.end_sample` marks the true end of speech; its audio also includes the pre-roll
+  before the start and the hangover tail after the end.
+- `flush()` closes a turn that is still open when the stream ends.
+
+`eval/vad_turns.py` runs both over an audio file and prints each turn's start, end and
+duration.
+
+These defaults are the blueprint's; the M2-4 hangover comparison will revisit them. VAD on
+8 kHz phone audio is planned for M9.

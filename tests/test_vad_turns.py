@@ -181,3 +181,71 @@ def test_end_threshold_must_be_below_start_threshold() -> None:
 def test_durations_must_be_positive(setting: str) -> None:
     with pytest.raises(ValueError):
         TurnDetector(FakeProbability([]), **{setting: 0})
+
+
+def push_all(detector: TurnDetector, first: int, last: int) -> list[tuple]:
+    events = []
+    for index in range(first, last + 1):
+        event = detector.push(window(index))
+        if event is not None:
+            events.append((type(event).__name__, index))
+    return events
+
+
+def test_flush_closes_a_turn_when_the_stream_ends_mid_speech() -> None:
+    probabilities = [0.0] * 15 + [0.9] * 20
+    assert run(probabilities) == [("start", 22, 15 * WINDOW_SAMPLES)]
+    detector = TurnDetector(FakeProbability(probabilities))
+    push_all(detector, 0, 34)
+    turn = detector.flush()
+    assert isinstance(turn, SpeechEnded)
+    assert (turn.start_sample, turn.end_sample) == (15 * WINDOW_SAMPLES, 35 * WINDOW_SAMPLES)
+    assert np.array_equal(turn.audio, ramp(5, 34))
+
+
+def test_flush_keeps_trailing_silence_but_ends_at_the_last_speech() -> None:
+    probabilities = [0.0] * 15 + [0.9] * 20 + [0.0] * 10
+    detector = TurnDetector(FakeProbability(probabilities))
+    assert push_all(detector, 0, 44) == [("SpeechStarted", 22)]
+    turn = detector.flush()
+    assert isinstance(turn, SpeechEnded)
+    assert (turn.start_sample, turn.end_sample) == (15 * WINDOW_SAMPLES, 35 * WINDOW_SAMPLES)
+    assert np.array_equal(turn.audio, ramp(5, 44))
+
+
+def test_flush_drops_an_unconfirmed_candidate() -> None:
+    detector = TurnDetector(FakeProbability([0.0] * 15 + [0.9] * 5))
+    assert push_all(detector, 0, 19) == []
+    assert detector.flush() is None
+
+
+def test_flush_when_idle_returns_none() -> None:
+    assert TurnDetector(FakeProbability([])).flush() is None
+    detector = TurnDetector(FakeProbability([0.0] * 20))
+    push_all(detector, 0, 19)
+    assert detector.flush() is None
+
+
+def test_second_flush_returns_none() -> None:
+    detector = TurnDetector(FakeProbability([0.0] * 15 + [0.9] * 20))
+    push_all(detector, 0, 34)
+    assert isinstance(detector.flush(), SpeechEnded)
+    assert detector.flush() is None
+
+
+def test_pushing_after_a_flush_continues_the_stream() -> None:
+    probabilities = [0.0] * 15 + [0.9] * 20 + [0.0] * 5 + [0.9] * 10 + [0.0] * 30
+    detector = TurnDetector(FakeProbability(probabilities))
+    push_all(detector, 0, 34)
+    assert isinstance(detector.flush(), SpeechEnded)
+    events = []
+    for index in range(35, 80):
+        event = detector.push(window(index))
+        if event is not None:
+            events.append((index, event))
+    assert [index for index, _ in events] == [47, 71]
+    started, ended = events[0][1], events[1][1]
+    assert isinstance(started, SpeechStarted) and isinstance(ended, SpeechEnded)
+    assert started.start_sample == 40 * WINDOW_SAMPLES
+    assert (ended.start_sample, ended.end_sample) == (40 * WINDOW_SAMPLES, 50 * WINDOW_SAMPLES)
+    assert np.array_equal(ended.audio, ramp(30, 71))
