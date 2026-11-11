@@ -70,3 +70,11 @@ Questions about code I haven't understood yet. Answer each one in my own words o
 | `eval/vad_turns.py` | 12-23 | Why does `find_turns` drop a trailing partial window instead of padding it, and how does `reshape` give row views without copying? | |
 | `eval/vad_turns.py`, `tests/test_vad_turns_runner.py` | 31; 45-56 | Why does each file (and each test run) need a fresh `SileroVad` and `TurnDetector`, and what would leak between files if one were reused? | |
 | `tests/test_vad_turns_runner.py` | 59-75 | How does pytest's `capsys` fixture capture what `main()` prints, and why test `main(argv)` in-process rather than through a subprocess? | |
+| `pyproject.toml`, `uv.lock` | 6; all | Why does faster-whisper run without torch (CTranslate2), and why does it still bring in onnxruntime and av? | |
+| `services/api/kotha/asr/whisper.py` | 27 | What do `device="cpu"` and `compute_type="int8"` do in CTranslate2, and what does int8 quantisation trade for speed and memory? | |
+| `services/api/kotha/asr/whisper.py` | 41-50 | Why does `transcribe` return a lazy generator, why must `list()` consume it before the call is finished, and why does language detection still happen eagerly? | |
+| `services/api/kotha/asr/whisper.py` | 46 | Why turn off `condition_on_previous_text` for short turns, and how can conditioning carry an error from one segment into the next? | |
+| `services/api/kotha/asr/whisper.py` | 48 | Why disable faster-whisper's own Silero VAD (`vad_filter=False`) when the turn detector has already cut the audio? | |
+| `services/api/kotha/asr/whisper.py` | 51-58 | What do `avg_logprob` and `no_speech_prob` measure, why take the worst segment for each, and why does an empty result report -inf and 1.0? | |
+| `services/api/kotha/asr/whisper.py` | 41-48 | How does faster-whisper's default temperature fallback (retrying with sampling when `avg_logprob` < -1.0 or the compression ratio is high) make two runs on the same audio differ? | |
+| `tests/test_asr_whisper.py` | 49-52 | How does `monkeypatch.setattr("kotha.asr.whisper.WhisperModel", ...)` replace the name the wrapper looks up, and why would patching `faster_whisper.WhisperModel` not work? | |
