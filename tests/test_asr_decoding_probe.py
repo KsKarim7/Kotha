@@ -136,6 +136,11 @@ def test_summarize_flags_differing_and_empty_runs() -> None:
     assert (row.repeatable, row.empty, row.text) == (False, True, "a b c")
 
 
+def test_summarize_leaves_repeatability_open_for_a_single_run() -> None:
+    row = summarize("clip.wav", "cpu", "current", [stats(4.0, "a")])
+    assert (row.runs, row.median_s, row.max_s, row.repeatable) == (1, 4.0, 4.0, None)
+
+
 def test_main_prints_one_row_per_config(
     fake_model: type[FakeModel], clip: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -143,6 +148,7 @@ def test_main_prints_one_row_per_config(
     printed = rows(capsys.readouterr().out)
     assert [row[2] for row in printed] == list(CONFIGS)
     assert [row[3] for row in printed] == ["1", "2", "2", "2", "2", "2", "2"]
+    assert [row[6] for row in printed] == ["-", "yes", "yes", "yes", "yes", "yes", "yes"]
     model = fake_model.instances[0]
     assert model.settings == ("small", "cpu", "int8_float16")
     assert [call.get("max_new_tokens") for call in model.calls if "max_new_tokens" in call] == [
