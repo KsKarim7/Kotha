@@ -1,5 +1,5 @@
 # 0004: Run faster-whisper on the local GPU with cuBLAS from a uv dependency group
-Status: proposed · Date: 2026-11-11
+Status: accepted · Date: 2026-11-11
 
 ## Context
 The live path should run ASR on the local GTX 1650 (4 GB, compute capability 7.5, Windows
@@ -34,5 +34,8 @@ loaded. This must be rechecked on any CTranslate2 upgrade. cuBLAS 12.9 itself de
 - A sync with `--no-default-groups`, `--no-group gpu` or `UV_NO_GROUP` removes it; the runbook
   says how to restore it.
 - `LD_LIBRARY_PATH` points into `~/kotha/.venv`, so moving the repo means updating the line.
-- On this GPU, small and medium both load and run with float16, int8_float16 and int8; none
-  of these failed or ran out of memory. Which one the live path uses is decided in M3-6.
+- On this GPU, small and medium both load and run with float16, int8_float16 and int8,
+  without errors or running out of memory; medium returned empty text in some runs. The
+  device check's timings are not comparable yet, because decoding fell into repetition loops
+  and temperature-fallback retries; rerun it once the decoding settings are fixed. Which
+  compute type the live path uses is decided in M3-6.
