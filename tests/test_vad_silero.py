@@ -4,7 +4,8 @@ import numpy as np
 import pytest
 
 from kotha.audio.convert import SAMPLE_RATE_HZ, load_mono_16k
-from kotha.vad.silero import WINDOW_SAMPLES, SileroVad
+from kotha.vad import WINDOW_SAMPLES
+from kotha.vad.silero import SileroVad
 
 SPEECH_PATH = Path(__file__).parent / "fixtures" / "speech_16k.wav"
 

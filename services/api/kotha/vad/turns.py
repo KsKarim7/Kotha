@@ -89,6 +89,11 @@ class TurnDetector:
         self._silence_windows += 1
         if self._silence_windows < self._hangover_windows:
             return None
+        return self.flush()
+
+    def flush(self) -> SpeechEnded | None:
+        if self._turn is None:
+            return None
         turn_windows, self._turn = self._turn, None
         if not self._confirmed:
             return None

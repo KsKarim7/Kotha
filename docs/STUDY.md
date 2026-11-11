@@ -63,3 +63,10 @@ Questions about code I haven't understood yet. Answer each one in my own words o
 | `services/api/kotha/vad/turns.py` | 60 | Why does `push` store a float32 copy of each window instead of the caller's array, and what would go wrong if M8 reused one buffer? | |
 | `services/api/kotha/vad/turns.py`, `tests/test_vad_turns.py` | 24-31; 8-15 | Why does the detector take a probability callable instead of a `SileroVad`, and how does that let the tests script probabilities without torch? | |
 | `services/api/kotha/vad/__init__.py` | 1 | Why did `WINDOW_SAMPLES` move out of `silero.py`, and how does importing a constant from a module that imports torch make every importer pay for torch? | |
+| `services/api/kotha/vad/turns.py` | 92-101 | Why close an open turn with `flush()` instead of padding the file with zeros, and how would padding tie the runner to the hangover setting? | |
+| `services/api/kotha/vad/turns.py` | 94-101 | Why does `flush()` leave the sample counter and pre-roll alone, and what does `test_pushing_after_a_flush_continues_the_stream` show about the next turn's pre-roll? | |
+| `services/api/kotha/vad/turns.py`, `tests/test_vad_turns.py` | 94-101; 206-213 | Why does a flushed turn's `end_sample` stay at the last speech window while its audio runs through the last pushed window? | |
+| `services/api/kotha/vad/turns.py` | 89-92 | How does `_advance` reuse `flush()` when the hangover completes, and why do the 23 earlier tests prove the behaviour did not change? | |
+| `eval/vad_turns.py` | 12-23 | Why does `find_turns` drop a trailing partial window instead of padding it, and how does `reshape` give row views without copying? | |
+| `eval/vad_turns.py`, `tests/test_vad_turns_runner.py` | 31; 45-56 | Why does each file (and each test run) need a fresh `SileroVad` and `TurnDetector`, and what would leak between files if one were reused? | |
+| `tests/test_vad_turns_runner.py` | 59-75 | How does pytest's `capsys` fixture capture what `main()` prints, and why test `main(argv)` in-process rather than through a subprocess? | |

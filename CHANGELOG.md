@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A script in `eval/` that plots 16 kHz audio against simulated telephony, and the resulting figure in the README.
 - A Silero VAD wrapper in `kotha.vad.silero` that returns one speech probability per 32 ms window, with torch installed from the PyTorch CPU index.
 - A turn detector in `kotha.vad.turns` that turns 32 ms speech probabilities into speech-started and speech-ended events, with hysteresis, minimum speech, hangover and pre-roll.
+- `TurnDetector.flush()` to close a turn still open at the end of a stream, a script in `eval/` that prints the turns Silero finds in an audio file, and VAD notes in `docs/ARCHITECTURE.md`.
 
 ### Changed
 
