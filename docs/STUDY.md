@@ -54,3 +54,12 @@ Questions about code I haven't understood yet. Answer each one in my own words o
 | `services/api/kotha/vad/silero.py` | 20-21 | What does `torch.no_grad()` turn off, and why do silero-vad's own `get_speech_timestamps` and `VADIterator` use it? | |
 | `services/api/kotha/vad/silero.py` | 15-19 | Why must the wrapper check dtype and shape itself, when the model rejects 511 samples and float64 with a generic error but accepts a `(1, 512)` array? | |
 | `tests/test_vad_silero.py` | 55-66 | How does feeding two instances interleaved windows show that they don't share state, and why compare against a fresh, reset instance? | |
+| `services/api/kotha/vad/turns.py` | 53-54 | Why does `-(-ms * SAMPLE_RATE_HZ // (1000 * WINDOW_SAMPLES))` round up, and why is ceil ("at least" the configured time) the right choice over floor or round for 250, 700 and 300 ms? | |
+| `services/api/kotha/vad/turns.py` | 80-86 | Why is `SpeechStarted` emitted only once minimum speech is confirmed, and what does that guarantee M8 about pairing every start with exactly one end? | |
+| `services/api/kotha/vad/turns.py` | 70-81 | How do the two thresholds form a hysteresis band, so 0.4 can continue a turn but never start one? | |
+| `services/api/kotha/vad/turns.py` | 80-91 | Why do speech windows count towards minimum speech even when they are not consecutive, while the silence run resets on any speech window? | |
+| `services/api/kotha/vad/turns.py` | 83, 95 | Why does `end_sample` mark the last speech window while the audio runs on through the hangover tail, and what does each give ASR and latency measurement? | |
+| `services/api/kotha/vad/turns.py` | 43, 64, 73 | How does the rolling pre-roll buffer work, and why can the next turn's pre-roll overlap the previous turn's hangover tail (windows 45-46 in `test_two_utterances_have_separate_audio`)? | |
+| `services/api/kotha/vad/turns.py` | 60 | Why does `push` store a float32 copy of each window instead of the caller's array, and what would go wrong if M8 reused one buffer? | |
+| `services/api/kotha/vad/turns.py`, `tests/test_vad_turns.py` | 24-31; 8-15 | Why does the detector take a probability callable instead of a `SileroVad`, and how does that let the tests script probabilities without torch? | |
+| `services/api/kotha/vad/__init__.py` | 1 | Why did `WINDOW_SAMPLES` move out of `silero.py`, and how does importing a constant from a module that imports torch make every importer pay for torch? | |
