@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Audio helpers in `kotha.audio.convert`: exact conversion between float32 and little-endian PCM16, resampling, and loading any WAV or FLAC as float32 mono 16 kHz.
 - A mu-law telephony simulator in `kotha.audio.telephony`, notes on the audio formats in `docs/ARCHITECTURE.md`, and ruff now sorts `kotha` imports as first-party.
 - A script in `eval/` that plots 16 kHz audio against simulated telephony, and the resulting figure in the README.
+- A Silero VAD wrapper in `kotha.vad.silero` that returns one speech probability per 32 ms window, with torch installed from the PyTorch CPU index.
 
 ### Changed
 

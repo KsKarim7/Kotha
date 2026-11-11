@@ -46,3 +46,11 @@ Questions about code I haven't understood yet. Answer each one in my own words o
 | `docs/img/spectrogram_telephony.png` | n/a | Why does faint energy remain between 4 and about 4.5 kHz after `simulate_telephony` (the `resample_poly` filter's transition band), and why is it dark above that? | |
 | `pyproject.toml`, `eval/` | 29, 33; all | Why does `eval/` have no `__init__.py`, how does `pythonpath = ["eval"]` let tests import `plot_spectrograms`, and why would a package named `eval` be a problem? | |
 | `eval/plot_spectrograms.py` | 45-50 | Why does `main(argv: list[str] \| None = None)` pass `argv` to `parse_args`, and how does that make the CLI testable without a subprocess? | |
+| `pyproject.toml` | 5-11, 30-31 | Why does `[tool.uv.sources]` pin torch to the CPU index only when torch is a direct dependency, and what happened when it was only pulled in by silero-vad? | |
+| `pyproject.toml` | 25-28 | What does `explicit = true` on the `pytorch-cpu` index prevent, and why would leaving it out risk other packages resolving from the PyTorch index? | |
+| `uv.lock` | 585-624 | Why are there two torch entries, `2.15.0+cpu` for non-macOS and `2.15.0` for macOS, and what is a `+cpu` local version? | |
+| `services/api/kotha/vad/silero.py` | 12 | Where do Silero's weights come from (`silero_vad/data/silero_vad.jit` through `importlib.resources`), and why does shipping them inside the package matter for on-prem mode? | |
+| `services/api/kotha/vad/silero.py` | 21, 24 | What state does the Silero model keep between windows, why is one instance per call needed, and what does `reset_states()` clear? | |
+| `services/api/kotha/vad/silero.py` | 20-21 | What does `torch.no_grad()` turn off, and why do silero-vad's own `get_speech_timestamps` and `VADIterator` use it? | |
+| `services/api/kotha/vad/silero.py` | 15-19 | Why must the wrapper check dtype and shape itself, when the model rejects 511 samples and float64 with a generic error but accepts a `(1, 512)` array? | |
+| `tests/test_vad_silero.py` | 55-66 | How does feeding two instances interleaved windows show that they don't share state, and why compare against a fresh, reset instance? | |
