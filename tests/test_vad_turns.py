@@ -151,6 +151,20 @@ def test_probability_is_called_once_per_window() -> None:
     assert all(seen is sent for seen, sent in zip(fake.windows, pushed, strict=True))
 
 
+def test_turn_audio_survives_a_reused_window_buffer() -> None:
+    probabilities = [0.0] * 15 + [0.9] * 20 + [0.0] * 30
+    detector = TurnDetector(FakeProbability(probabilities))
+    buffer = np.empty(WINDOW_SAMPLES, dtype=np.float32)
+    turns = []
+    for index in range(len(probabilities)):
+        buffer[:] = index
+        event = detector.push(buffer)
+        if isinstance(event, SpeechEnded):
+            turns.append(event)
+    assert len(turns) == 1
+    assert np.array_equal(turns[0].audio, ramp(5, 56))
+
+
 @pytest.mark.parametrize("size", [WINDOW_SAMPLES - 1, WINDOW_SAMPLES + 1])
 def test_push_rejects_wrong_window_size(size: int) -> None:
     detector = TurnDetector(FakeProbability([0.0]))
