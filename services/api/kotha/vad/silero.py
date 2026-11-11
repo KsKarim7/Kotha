@@ -3,8 +3,7 @@ import torch
 from silero_vad import load_silero_vad
 
 from kotha.audio.convert import SAMPLE_RATE_HZ
-
-WINDOW_SAMPLES = 512
+from kotha.vad import WINDOW_SAMPLES
 
 
 class SileroVad:

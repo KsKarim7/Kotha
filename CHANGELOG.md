@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A mu-law telephony simulator in `kotha.audio.telephony`, notes on the audio formats in `docs/ARCHITECTURE.md`, and ruff now sorts `kotha` imports as first-party.
 - A script in `eval/` that plots 16 kHz audio against simulated telephony, and the resulting figure in the README.
 - A Silero VAD wrapper in `kotha.vad.silero` that returns one speech probability per 32 ms window, with torch installed from the PyTorch CPU index.
+- A turn detector in `kotha.vad.turns` that turns 32 ms speech probabilities into speech-started and speech-ended events, with hysteresis, minimum speech, hangover and pre-roll.
 
 ### Changed
 
