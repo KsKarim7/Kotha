@@ -64,7 +64,7 @@ class ProbeRow:
     runs: int
     median_s: float
     max_s: float
-    repeatable: bool
+    repeatable: bool | None
     max_tokens: int
     max_compression_ratio: float
     temperatures: tuple[float, ...]
@@ -105,7 +105,7 @@ def summarize(clip: str, device: str, config: str, runs: list[RunStats]) -> Prob
         runs=len(runs),
         median_s=statistics.median(seconds),
         max_s=max(seconds),
-        repeatable=all(run.text == runs[0].text for run in runs),
+        repeatable=all(run.text == runs[0].text for run in runs) if len(runs) > 1 else None,
         max_tokens=max(run.max_tokens for run in runs),
         max_compression_ratio=max(run.max_compression_ratio for run in runs),
         temperatures=tuple(sorted({t for run in runs for t in run.temperatures})),
@@ -158,7 +158,7 @@ def main(argv: list[str] | None = None) -> None:
                         str(row.runs),
                         f"{row.median_s:.2f}",
                         f"{row.max_s:.2f}",
-                        "yes" if row.repeatable else "no",
+                        "-" if row.repeatable is None else ("yes" if row.repeatable else "no"),
                         str(row.max_tokens),
                         f"{row.max_compression_ratio:.2f}",
                         ",".join(f"{t:.1f}" for t in row.temperatures) or "-",
