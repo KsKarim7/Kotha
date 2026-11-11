@@ -11,8 +11,18 @@ One-time setup, in an Ubuntu terminal:
 
 ```bash
 cd ~/kotha && uv sync
-grep -qF 'nvidia/cublas/lib' ~/.bashrc || echo 'export LD_LIBRARY_PATH="$HOME/kotha/.venv/lib/python3.11/site-packages/nvidia/cublas/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"' >> ~/.bashrc
+grep -qF 'nvidia/cublas/lib' ~/.bashrc || cat >> ~/.bashrc <<'EOF'
+_kotha_cublas="$HOME/kotha/.venv/lib/python3.11/site-packages/nvidia/cublas/lib"
+case ":${LD_LIBRARY_PATH:-}:" in
+  *":$_kotha_cublas:"*) ;;
+  *) export LD_LIBRARY_PATH="$_kotha_cublas${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" ;;
+esac
+unset _kotha_cublas
+EOF
 ```
+
+The block adds the path only if it is not already there, so re-sourcing `~/.bashrc` or
+opening nested shells doesn't repeat it.
 
 Then open a new terminal, and in VS Code run "Developer: Reload Window" so that its terminals
 and extensions pick up the variable.

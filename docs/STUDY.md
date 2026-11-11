@@ -86,3 +86,9 @@ Questions about code I haven't understood yet. Answer each one in my own words o
 | `eval/asr_device_check.py` | 43-78 | What do the compute types float16, int8_float16 and int8 store and compute in, and why can all three run on compute capability 7.5? | |
 | `eval/asr_device_check.py` | 52-64, 98 | Why read GPU memory right after loading, and how do `del`, returning from the function and `gc.collect()` make sure one model is freed before the next loads? | |
 | `eval/asr_device_check.py` | 55-62 | Why do the transcribe times here mostly measure the temperature fallback and repetition loops (compression ratio about 20 at temperature 0), not the compute type? | |
+| `eval/asr_decoding_probe.py` | 20-21 | How does faster-whisper's temperature fallback work (retry at 0.2, 0.4, ... 1.0 when the compression ratio is above 2.4 or `avg_logprob` is below -1.0), and why does it make a looping clip slow and unrepeatable? | |
+| `eval/asr_decoding_probe.py` | 91, 110 | Why is the compression ratio (gzip ratio of the text) a cheap loop detector, and what ratio does normal speech have compared with a repetition loop? | |
+| `eval/asr_decoding_probe.py` | 21-22 | What is the difference between greedy decoding (`beam_size=1`) and beam search (`beam_size=5`), and why can beam search avoid a loop that greedy decoding falls into? | |
+| `eval/asr_decoding_probe.py` | 23-24 | How do `repetition_penalty` and `no_repeat_ngram_size` differ in what they forbid or discourage, and what can each break in normal text? | |
+| `eval/asr_decoding_probe.py` | 25-26 | How does `max_new_tokens` bound decoding time, why must it stay at or below 448 minus the prompt, and why does hitting it cut the output rather than fix the loop? | |
+| `eval/asr_decoding_probe.py` | 77-80 | Why can GPU float16 (and sampling at temperature > 0 without a seed) give different results on the same audio, and what does that mean for comparing runs? | |
