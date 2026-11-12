@@ -8,7 +8,7 @@ from time import perf_counter
 import numpy as np
 from faster_whisper import WhisperModel
 
-from kotha.audio.convert import load_mono_16k
+from kotha.audio.convert import SAMPLE_RATE_HZ, load_mono_16k
 
 FIXED_OPTIONS = {
     "language": "bn",
@@ -25,6 +25,8 @@ CONFIGS: dict[str, dict] = {
     "t0_ngram": {"beam_size": 1, "temperature": 0.0, "no_repeat_ngram_size": 3},
     "t0_cap": {"beam_size": 1, "temperature": 0.0, "max_new_tokens": None},
     "beam5_cap": {"beam_size": 5, "temperature": 0.0, "max_new_tokens": None},
+    "t0_nots": {"beam_size": 1, "temperature": 0.0, "without_timestamps": True},
+    "beam5_nots": {"beam_size": 5, "temperature": 0.0, "without_timestamps": True},
 }
 
 COLUMNS = (
@@ -42,6 +44,11 @@ COLUMNS = (
     "max_no_speech_prob",
     "empty",
     "bengali_share",
+    "audio_s",
+    "words",
+    "segments",
+    "first_word_s",
+    "last_word_end_s",
     "text",
 )
 
@@ -56,6 +63,10 @@ class RunStats:
     worst_avg_logprob: float
     max_no_speech_prob: float
     empty: bool
+    words: int
+    segments: int
+    first_word_s: float | None
+    last_word_end_s: float | None
 
 
 @dataclass(frozen=True)
@@ -74,6 +85,11 @@ class ProbeRow:
     max_no_speech_prob: float
     empty: bool
     bengali_share: float | None
+    audio_s: float
+    words: int
+    segments: int
+    first_word_s: float | None
+    last_word_end_s: float | None
     text: str
 
 
@@ -85,8 +101,24 @@ def run_once(model: WhisperModel, audio_16k: np.ndarray, options: dict) -> RunSt
     # Same joining rule as kotha.asr.whisper.WhisperAsr, so the texts are comparable.
     segment_texts = (segment.text.strip() for segment in segments)
     text = " ".join(text for text in segment_texts if text)
+    words = [word for segment in segments for word in segment.words]
+    first_word_s = words[0].start if words else None
+    last_word_end_s = words[-1].end if words else None
     if not segments:
-        return RunStats(seconds, "", 0, 0.0, (), float("-inf"), 1.0, True)
+        return RunStats(
+            seconds=seconds,
+            text="",
+            max_tokens=0,
+            max_compression_ratio=0.0,
+            temperatures=(),
+            worst_avg_logprob=float("-inf"),
+            max_no_speech_prob=1.0,
+            empty=True,
+            words=0,
+            segments=0,
+            first_word_s=None,
+            last_word_end_s=None,
+        )
     return RunStats(
         seconds=seconds,
         text=text,
@@ -96,6 +128,10 @@ def run_once(model: WhisperModel, audio_16k: np.ndarray, options: dict) -> RunSt
         worst_avg_logprob=min(segment.avg_logprob for segment in segments),
         max_no_speech_prob=max(segment.no_speech_prob for segment in segments),
         empty=not text,
+        words=len(words),
+        segments=len(segments),
+        first_word_s=first_word_s,
+        last_word_end_s=last_word_end_s,
     )
 
 
@@ -106,7 +142,9 @@ def bengali_share(text: str) -> float | None:
     return sum("\u0980" <= char <= "\u09ff" for char in letters) / len(letters)
 
 
-def summarize(clip: str, device: str, config: str, runs: list[RunStats]) -> ProbeRow:
+def summarize(
+    clip: str, device: str, config: str, audio_s: float, runs: list[RunStats]
+) -> ProbeRow:
     seconds = [run.seconds for run in runs]
     return ProbeRow(
         clip=clip,
@@ -123,8 +161,24 @@ def summarize(clip: str, device: str, config: str, runs: list[RunStats]) -> Prob
         max_no_speech_prob=max(run.max_no_speech_prob for run in runs),
         empty=any(run.empty for run in runs),
         bengali_share=bengali_share(runs[0].text),
+        audio_s=audio_s,
+        words=runs[0].words,
+        segments=runs[0].segments,
+        first_word_s=runs[0].first_word_s,
+        last_word_end_s=runs[0].last_word_end_s,
         text=" ".join(runs[0].text.split()),
     )
+
+
+def config_options(config: str, max_new_tokens: int | None) -> dict:
+    options = dict(CONFIGS[config])
+    if "max_new_tokens" in options:
+        options["max_new_tokens"] = max_new_tokens
+    return options
+
+
+def two_decimals_or_dash(value: float | None) -> str:
+    return "-" if value is None else f"{value:.2f}"
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -137,6 +191,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--runs", type=int, default=3)
     parser.add_argument("--max-new-tokens", type=int)
     parser.add_argument("--budget-s", type=float, default=float("inf"))
+    parser.add_argument("--warmup", action="store_true")
     args = parser.parse_args(argv)
     if args.runs < 1:
         parser.error("--runs must be at least 1")
@@ -144,22 +199,24 @@ def main(argv: list[str] | None = None) -> None:
     if capped and args.max_new_tokens is None:
         parser.error(f"--max-new-tokens is required for {', '.join(capped)}")
 
-    started = perf_counter()
     model = WhisperModel(args.model, device=args.device, compute_type=args.compute_type)
+    if args.warmup:
+        warmup_options = config_options(args.configs[0], args.max_new_tokens)
+        run_once(model, load_mono_16k(args.clips[0]), warmup_options)
+    started = perf_counter()
     print("\t".join(COLUMNS))
     for clip in args.clips:
         audio_16k = load_mono_16k(clip)
+        audio_s = len(audio_16k) / SAMPLE_RATE_HZ
         for config in args.configs:
             if perf_counter() - started > args.budget_s:
                 skipped = [clip.name, args.device, config, "skipped (budget)"]
                 print("\t".join(skipped + ["-"] * (len(COLUMNS) - len(skipped))))
                 continue
-            options = dict(CONFIGS[config])
-            if "max_new_tokens" in options:
-                options["max_new_tokens"] = args.max_new_tokens
+            options = config_options(config, args.max_new_tokens)
             run_count = 1 if config == "current" else args.runs
             runs = [run_once(model, audio_16k, options) for _ in range(run_count)]
-            row = summarize(clip.name, args.device, config, runs)
+            row = summarize(clip.name, args.device, config, audio_s, runs)
             print(
                 "\t".join(
                     [
@@ -176,7 +233,12 @@ def main(argv: list[str] | None = None) -> None:
                         f"{row.worst_avg_logprob:.3f}",
                         f"{row.max_no_speech_prob:.3f}",
                         "yes" if row.empty else "no",
-                        "-" if row.bengali_share is None else f"{row.bengali_share:.2f}",
+                        two_decimals_or_dash(row.bengali_share),
+                        f"{row.audio_s:.2f}",
+                        str(row.words),
+                        str(row.segments),
+                        two_decimals_or_dash(row.first_word_s),
+                        two_decimals_or_dash(row.last_word_end_s),
                         row.text or "-",
                     ]
                 ),
