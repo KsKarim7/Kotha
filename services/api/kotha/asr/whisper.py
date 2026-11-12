@@ -1,7 +1,9 @@
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 import numpy as np
 from faster_whisper import WhisperModel
+from faster_whisper.transcribe import Segment
 
 
 @dataclass(frozen=True)
@@ -17,7 +19,14 @@ class Transcript:
     language: str
     worst_avg_logprob: float
     max_no_speech_prob: float
+    max_compression_ratio: float
+    max_segment_tokens: int
     words: tuple[Word, ...]
+
+
+def join_segment_texts(segments: Iterable[Segment]) -> str:
+    segment_texts = (segment.text.strip() for segment in segments)
+    return " ".join(text for text in segment_texts if text)
 
 
 class WhisperAsr:
@@ -33,6 +42,7 @@ class WhisperAsr:
         language: str | None = "bn",
         beam_size: int = 1,
         initial_prompt: str | None = None,
+        word_timestamps: bool = False,
     ) -> Transcript:
         if audio_16k.dtype != np.float32 or audio_16k.ndim != 1:
             raise ValueError(
@@ -43,19 +53,30 @@ class WhisperAsr:
             language=language,
             beam_size=beam_size,
             initial_prompt=initial_prompt,
+            temperature=0.0,
+            without_timestamps=True,
             condition_on_previous_text=False,
-            word_timestamps=True,
+            word_timestamps=word_timestamps,
             vad_filter=False,
         )
         segments = list(segment_stream)
         if not segments:
-            return Transcript("", info.language, float("-inf"), 1.0, ())
-        segment_texts = (segment.text.strip() for segment in segments)
+            return Transcript(
+                text="",
+                language=info.language,
+                worst_avg_logprob=float("-inf"),
+                max_no_speech_prob=1.0,
+                max_compression_ratio=0.0,
+                max_segment_tokens=0,
+                words=(),
+            )
         return Transcript(
-            text=" ".join(text for text in segment_texts if text),
+            text=join_segment_texts(segments),
             language=info.language,
             worst_avg_logprob=min(segment.avg_logprob for segment in segments),
             max_no_speech_prob=max(segment.no_speech_prob for segment in segments),
+            max_compression_ratio=max(segment.compression_ratio for segment in segments),
+            max_segment_tokens=max(len(segment.tokens) for segment in segments),
             words=tuple(
                 Word(word.word.strip(), float(word.start), float(word.end))
                 for segment in segments
