@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A faster-whisper ASR wrapper in `kotha.asr.whisper` that turns 16 kHz audio into a transcript with language, confidence signals and word timings, running on CPU.
 - Local GPU support for faster-whisper: cuBLAS for CUDA 12 in a `gpu` dependency group that CI skips, a setup runbook, ADR 0004, and a script in `eval/` that checks which compute types work on a device.
 - A Whisper decoding-stability probe in `eval/` that compares decoding settings (temperature, beam size, repetition controls, a token cap) on the same clips, and an idempotent `LD_LIBRARY_PATH` block in the GPU runbook.
+- A text normaliser in `kotha.text.normalize` that WER applies to both references and hypotheses: format characters removed, Unicode NFC, Bangla digits to ASCII, lowercase, punctuation to spaces, whitespace collapsed.
 
 ### Changed
 

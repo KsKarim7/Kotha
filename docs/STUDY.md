@@ -92,3 +92,8 @@ Questions about code I haven't understood yet. Answer each one in my own words o
 | `eval/asr_decoding_probe.py` | 23-24 | How do `repetition_penalty` and `no_repeat_ngram_size` differ in what they forbid or discourage, and what can each break in normal text? | |
 | `eval/asr_decoding_probe.py` | 25-26 | How does `max_new_tokens` bound decoding time, why must it stay at or below 448 minus the prompt, and why does hitting it cut the output rather than fix the loop? | |
 | `eval/asr_decoding_probe.py` | 77-80 | Why can GPU float16 (and sampling at temperature > 0 without a seed) give different results on the same audio, and what does that mean for comparing runs? | |
+| `services/api/kotha/text/normalize.py` | 8 | What is the difference between NFC and NFD, and why do য়, ড় and ঢ় stay decomposed under NFC (composition exclusions)? | |
+| `services/api/kotha/text/normalize.py` | 7, 9 | What do the Unicode general categories Cf, P*, Sc and Zs contain, and why is each one deleted, replaced, kept or collapsed here? | |
+| `services/api/kotha/text/normalize.py` | 6-10 | Why must references and hypotheses go through the same normaliser, and what would WER measure if they didn't? | |
+| `services/api/kotha/text/normalize.py` | 6-10 | Why must the normaliser not transliterate, even though it would lower WER on code-mixed speech? | |
+| `tests/test_text_normalize.py` | 53-55 | What does idempotence (`normalize(normalize(x)) == normalize(x)`) guarantee for stored references and reruns? | |
