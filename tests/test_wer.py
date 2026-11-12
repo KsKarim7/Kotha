@@ -1,14 +1,21 @@
 import csv
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
+from types import SimpleNamespace
 
+import numpy as np
 import pytest
+import soundfile as sf
 
+from kotha.asr.whisper import DECODING_OPTIONS, Transcript
+from kotha.audio.convert import SAMPLE_RATE_HZ
 from wer import (
+    REPO_ROOT,
     GroupScore,
     ManifestRow,
     Result,
     UtteranceScore,
+    main,
     read_manifest,
     score,
     select_split,
@@ -201,3 +208,237 @@ def test_empty_normalised_reference_names_the_id_but_not_the_text(
     message = str(error.value)
     assert message.endswith("ids: empty-1, empty-2")
     assert secret not in message and "কিছু" not in message and "।" not in message
+
+
+CLI_ROWS = [
+    ["bn-1", "bn-1.wav", "s01", "bn", "clean", "dev", "আমার নম্বর কত?"],
+    ["en-1", "en-1.wav", "s02", "en", "street", "test", "Check my balance."],
+    ["mix-1", "mix-1.wav", "s01", "mix", "fan", "dev", "আমার 30GB প্যাকেজ activate করো"],
+]
+CLIP_SAMPLES = {"bn-1": 1_600, "en-1": 3_200, "mix-1": 4_800}
+HYPOTHESES = {
+    1_600: "আমার নাম্বার কত",
+    3_200: "check my balance",
+    4_800: "আমার 30 GB প্যাকেজ activate করো",
+}
+TABLE_HEADER = "condition\tlang\tn\twer\tcer\tlatency_p50_s\tlatency_p95_s"
+
+
+class FakeAsr:
+    instances: list["FakeAsr"] = []
+
+    def __init__(self, model: str, *, device: str, compute_type: str) -> None:
+        self.settings = (model, device, compute_type)
+        self.calls: list[tuple[np.ndarray, str | None, int]] = []
+        FakeAsr.instances.append(self)
+
+    def transcribe(
+        self, audio_16k: np.ndarray, *, language: str | None, beam_size: int
+    ) -> Transcript:
+        self.calls.append((audio_16k, language, beam_size))
+        return Transcript(HYPOTHESES[audio_16k.size], "bn", -0.3, 0.1, 1.2, 5, ())
+
+
+@pytest.fixture
+def cli(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
+    FakeAsr.instances = []
+    monkeypatch.setattr("wer.WhisperAsr", FakeAsr)
+    data_dir = tmp_path / "audio"
+    data_dir.mkdir()
+    for clip_id, samples in CLIP_SAMPLES.items():
+        sf.write(data_dir / f"{clip_id}.wav", np.zeros(samples, dtype=np.float32), SAMPLE_RATE_HZ)
+    return SimpleNamespace(
+        data_dir=data_dir,
+        manifest=write_manifest(tmp_path / "manifest.csv", HEADER, CLI_ROWS),
+        output=tmp_path / "results" / "nested" / "utterances.csv",
+    )
+
+
+def install_clock(monkeypatch: pytest.MonkeyPatch, latencies: list[float]) -> Iterator[float]:
+    ticks = iter(
+        [
+            tick
+            for index, latency in enumerate(latencies)
+            for tick in (10.0 * index, 10.0 * index + latency)
+        ]
+    )
+    monkeypatch.setattr("wer.perf_counter", lambda: next(ticks))
+    return ticks
+
+
+def run_cli(cli: SimpleNamespace, *options: str) -> None:
+    main(
+        [
+            "--manifest",
+            str(cli.manifest),
+            "--data-dir",
+            str(cli.data_dir),
+            "--output",
+            str(cli.output),
+            *options,
+        ]
+    )
+
+
+def summary_rows(output: str) -> list[list[str]]:
+    lines = output.splitlines()
+    start = lines.index(TABLE_HEADER) + 1
+    return [line.split("\t") for line in lines[start : lines.index("", start)]]
+
+
+def test_main_scores_a_manifest_end_to_end(
+    cli: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    install_clock(monkeypatch, [1.0, 2.0, 3.0])
+    run_cli(cli, "--split", "all")
+    output = capsys.readouterr().out
+    assert summary_rows(output) == [
+        ["16k", "bn", "1", "0.3333", "0.1538", "1.00", "1.00"],
+        ["16k", "en", "1", "0.0000", "0.0000", "2.00", "2.00"],
+        ["16k", "mix", "1", "0.4000", "0.0333", "3.00", "3.00"],
+        ["16k", "all", "3", "0.2727", "0.0508", "2.00", "2.90"],
+    ]
+    assert output.splitlines()[-1] == "CER counts Unicode code points including spaces"
+    with cli.output.open(newline="", encoding="utf-8") as csv_file:
+        written = list(csv.DictReader(csv_file))
+    assert [
+        (
+            row["id"],
+            row["lang"],
+            row["noise"],
+            row["condition"],
+            row["reference"],
+            row["hypothesis"],
+        )
+        for row in written
+    ] == [
+        ("bn-1", "bn", "clean", "16k", "আমার নম্বর কত", "আমার নাম্বার কত"),
+        ("en-1", "en", "street", "16k", "check my balance", "check my balance"),
+        (
+            "mix-1",
+            "mix",
+            "fan",
+            "16k",
+            "আমার 30gb প্যাকেজ activate করো",
+            "আমার 30 gb প্যাকেজ activate করো",
+        ),
+    ]
+    assert [(float(row["wer"]), float(row["cer"]), float(row["latency_s"])) for row in written] == [
+        (pytest.approx(1 / 3), pytest.approx(2 / 13), 1.0),
+        (0.0, 0.0, 2.0),
+        (pytest.approx(2 / 5), pytest.approx(1 / 30), 3.0),
+    ]
+
+
+def test_warmup_is_one_extra_call_that_is_neither_timed_nor_scored(
+    cli: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    ticks = install_clock(monkeypatch, [1.0, 2.0, 3.0])
+    run_cli(cli, "--split", "all")
+    [asr] = FakeAsr.instances
+    assert [audio.size for audio, _, _ in asr.calls] == [1_600, 1_600, 3_200, 4_800]
+    assert next(ticks, None) is None
+    assert summary_rows(capsys.readouterr().out)[-1][:3] == ["16k", "all", "3"]
+
+
+def test_8k_condition_goes_through_telephony(
+    cli: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    telephony_outputs: list[np.ndarray] = []
+
+    def fake_telephony(audio_16k: np.ndarray) -> np.ndarray:
+        telephony_outputs.append(audio_16k.copy())
+        return telephony_outputs[-1]
+
+    monkeypatch.setattr("wer.simulate_telephony", fake_telephony)
+    install_clock(monkeypatch, [1.0, 2.0, 3.0, 1.0, 2.0, 3.0])
+    run_cli(cli, "--split", "all", "--condition", "16k", "8k")
+    assert [row[:2] for row in summary_rows(capsys.readouterr().out)] == [
+        ["16k", "bn"],
+        ["16k", "en"],
+        ["16k", "mix"],
+        ["16k", "all"],
+        ["8k", "bn"],
+        ["8k", "en"],
+        ["8k", "mix"],
+        ["8k", "all"],
+    ]
+    [asr] = FakeAsr.instances
+    assert len(telephony_outputs) == 3
+    assert all(
+        audio is sent for (audio, _, _), sent in zip(asr.calls[4:], telephony_outputs, strict=True)
+    )
+    with cli.output.open(newline="", encoding="utf-8") as csv_file:
+        assert [row["condition"] for row in csv.DictReader(csv_file)] == ["16k"] * 3 + ["8k"] * 3
+
+
+@pytest.mark.parametrize(("option", "language"), [("auto", None), ("bn", "bn")])
+def test_language_option(
+    cli: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, option: str, language: str | None
+) -> None:
+    install_clock(monkeypatch, [1.0, 2.0, 3.0])
+    run_cli(cli, "--split", "all", "--language", option)
+    [asr] = FakeAsr.instances
+    assert [(call_language, beam_size) for _, call_language, beam_size in asr.calls] == [
+        (language, 1)
+    ] * 4
+
+
+def test_split_filters_the_rows(
+    cli: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    install_clock(monkeypatch, [2.0])
+    run_cli(cli, "--split", "test")
+    assert summary_rows(capsys.readouterr().out) == [
+        ["16k", "en", "1", "0.0000", "0.0000", "2.00", "2.00"],
+        ["16k", "all", "1", "0.0000", "0.0000", "2.00", "2.00"],
+    ]
+
+
+def test_an_empty_split_is_an_error(
+    cli: SimpleNamespace, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write_manifest(cli.manifest, HEADER, [CLI_ROWS[0], CLI_ROWS[2]])
+    with pytest.raises(SystemExit):
+        run_cli(cli, "--split", "test")
+    assert "no rows in split 'test'" in capsys.readouterr().err
+    assert FakeAsr.instances == []
+
+
+def test_output_inside_the_repository_is_refused(
+    cli: SimpleNamespace, capsys: pytest.CaptureFixture[str]
+) -> None:
+    cli.output = REPO_ROOT / "eval" / "out.csv"
+    with pytest.raises(SystemExit):
+        run_cli(cli)
+    assert "must be written outside it" in capsys.readouterr().err
+    assert FakeAsr.instances == []
+    assert not cli.output.exists()
+
+
+def test_missing_output_directories_are_created(
+    cli: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    install_clock(monkeypatch, [1.0, 3.0])
+    assert not cli.output.parent.exists()
+    run_cli(cli)
+    assert cli.output.is_file()
+
+
+def test_header_shows_the_run_settings_and_decoding_options(
+    cli: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    install_clock(monkeypatch, [1.0, 2.0, 3.0])
+    run_cli(cli, "--split", "all")
+    decoding = ", ".join(f"{key}={value}" for key, value in DECODING_OPTIONS.items())
+    assert capsys.readouterr().out.splitlines()[:8] == [
+        "model: small",
+        "device: cpu",
+        "compute_type: int8",
+        "language: bn",
+        "split: all",
+        "rows: 3",
+        f"decoding: beam_size=1, {decoding}",
+        "normaliser: kotha.text.normalize.normalize",
+    ]
+    assert FakeAsr.instances[0].settings == ("small", "cpu", "int8")

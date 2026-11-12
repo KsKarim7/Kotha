@@ -1,15 +1,24 @@
+import argparse
 import csv
 import statistics
 from collections import defaultdict
 from collections.abc import Sequence
-from dataclasses import dataclass, fields
+from dataclasses import asdict, dataclass, fields
 from pathlib import Path
+from time import perf_counter
 
 import jiwer
 
+from kotha.asr.whisper import DECODING_OPTIONS, WhisperAsr
+from kotha.audio.convert import load_mono_16k
+from kotha.audio.telephony import simulate_telephony
 from kotha.text.normalize import normalize
 
 SPLITS = ("dev", "test", "all")
+CONDITIONS = ("16k", "8k")
+BEAM_SIZE = 1
+NORMALISER = "kotha.text.normalize.normalize"
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 @dataclass(frozen=True)
@@ -142,3 +151,99 @@ def utterance_scores(results: Sequence[Result]) -> list[UtteranceScore]:
         )
         for result, (reference, hypothesis) in zip(results, normalised_pairs(results), strict=True)
     ]
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--manifest", type=Path, required=True)
+    parser.add_argument("--data-dir", type=Path, required=True)
+    parser.add_argument("--model", default="small")
+    parser.add_argument("--device", default="cpu")
+    parser.add_argument("--compute-type", default="int8")
+    parser.add_argument("--condition", nargs="+", choices=CONDITIONS, default=["16k"])
+    parser.add_argument("--language", choices=("bn", "auto"), default="bn")
+    parser.add_argument("--split", choices=SPLITS, default="dev")
+    parser.add_argument("--output", type=Path, required=True)
+    return parser
+
+
+def transcribe_row(
+    asr: WhisperAsr, row: ManifestRow, data_dir: Path, condition: str, language: str | None
+) -> Result:
+    audio_16k = load_mono_16k(data_dir / row.path)
+    if condition == "8k":
+        audio_16k = simulate_telephony(audio_16k)
+    started = perf_counter()
+    transcript = asr.transcribe(audio_16k, language=language, beam_size=BEAM_SIZE)
+    latency_s = perf_counter() - started
+    return Result(row, condition, transcript.text, latency_s)
+
+
+def transcribe_all(
+    asr: WhisperAsr,
+    rows: Sequence[ManifestRow],
+    data_dir: Path,
+    conditions: Sequence[str],
+    language: str | None,
+) -> list[Result]:
+    asr.transcribe(load_mono_16k(data_dir / rows[0].path), language=language, beam_size=BEAM_SIZE)
+    return [
+        transcribe_row(asr, row, data_dir, condition, language)
+        for condition in conditions
+        for row in rows
+    ]
+
+
+def print_summary(args: argparse.Namespace, row_count: int, scores: Sequence[GroupScore]) -> None:
+    decoding = {"beam_size": BEAM_SIZE, **DECODING_OPTIONS}
+    print(f"model: {args.model}")
+    print(f"device: {args.device}")
+    print(f"compute_type: {args.compute_type}")
+    print(f"language: {args.language}")
+    print(f"split: {args.split}")
+    print(f"rows: {row_count}")
+    print(f"decoding: {', '.join(f'{key}={value}' for key, value in decoding.items())}")
+    print(f"normaliser: {NORMALISER}")
+    print()
+    print("condition\tlang\tn\twer\tcer\tlatency_p50_s\tlatency_p95_s")
+    for group in scores:
+        print(
+            f"{group.condition}\t{group.lang}\t{group.n}\t{group.wer:.4f}\t{group.cer:.4f}"
+            f"\t{group.latency_p50_s:.2f}\t{group.latency_p95_s:.2f}"
+        )
+    print()
+    print("CER counts Unicode code points including spaces")
+
+
+def write_utterances(path: Path, scores: Sequence[UtteranceScore]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as csv_file:
+        writer = csv.DictWriter(
+            csv_file, fieldnames=[field.name for field in fields(UtteranceScore)]
+        )
+        writer.writeheader()
+        writer.writerows(asdict(utterance) for utterance in scores)
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    output = args.output.resolve()
+    if output.is_relative_to(REPO_ROOT):
+        parser.error(
+            f"--output {args.output} is inside the repository; the CSV holds transcripts of "
+            "test audio and must be written outside it"
+        )
+    rows = select_split(read_manifest(args.manifest), args.split)
+    if not rows:
+        parser.error(f"no rows in split {args.split!r} of {args.manifest}")
+    conditions = list(dict.fromkeys(args.condition))
+    language = None if args.language == "auto" else "bn"
+    asr = WhisperAsr(args.model, device=args.device, compute_type=args.compute_type)
+    results = transcribe_all(asr, rows, args.data_dir, conditions, language)
+    print_summary(args, len(rows), score(results))
+    write_utterances(output, utterance_scores(results))
+
+
+if __name__ == "__main__":
+    main()
