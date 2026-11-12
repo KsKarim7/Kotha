@@ -28,6 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A text normaliser in `kotha.text.normalize` that WER applies to both references and hypotheses: format characters removed, Unicode NFC, Bangla digits to ASCII, lowercase, punctuation to spaces, whitespace collapsed.
 - Conversion steps in the runbook for two Bangla Whisper fine-tunes (whisper-medium and whisper-small based), pinned to a commit and converted to CTranslate2 locally, and a `bengali_share` column in the decoding probe that shows how much of the output is in Bengali script.
 - No-timestamps configs (`t0_nots`, `beam5_nots`) in the decoding probe, a `--warmup` option that runs one untimed transcription before timing starts, and columns for clip length, word count, segment count and the first and last word times.
+- A WER and CER scoring core in `eval/wer.py`: manifest reading, split selection, and corpus-level WER and CER with latency p50 and p95 per condition and language, on references and hypotheses that both go through the text normaliser; jiwer is a dev dependency.
 
 ### Changed
 

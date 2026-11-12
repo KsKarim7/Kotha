@@ -17,6 +17,7 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "jiwer>=4.0.0",
     "matplotlib>=3.11.2",
     "pre-commit>=4.7.0",
     "pytest>=9.2.0",
