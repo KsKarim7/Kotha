@@ -89,3 +89,38 @@ worst segment `avg_logprob`, the highest `no_speech_prob`, and word timings.
   -inf and `max_no_speech_prob` to 1.0; these are the wrapper's values, not the model's.
 
 The live model and compute type are chosen in M3-6, from WER and the device check.
+
+## Text normalisation
+
+`kotha.text.normalize.normalize` turns a transcript into the form that WER compares. It
+applies these rules in order:
+
+1. Delete format characters (Unicode category Cf: ZWJ, ZWNJ, zero-width space, BOM, soft
+   hyphen, bidi marks). They are invisible and keyboards insert them inconsistently; deleting
+   them first lets the next rule compose letters they had split.
+2. Unicode NFC, so precomposed and decomposed spellings of the same letter (`ো` against
+   `ে` + `া`) compare equal.
+3. Bangla digits ০-৯ to ASCII 0-9, so a number written in either script compares equal.
+4. Lowercase, so Latin case is not counted as an error.
+5. Replace every punctuation character (any category starting with P, including the danda
+   `।`) with a space, because the transcription guideline has no punctuation. Symbols such as
+   `৳` and `+` are kept.
+6. Collapse all whitespace (including no-break and thin spaces) to single spaces and strip.
+
+The same function is applied to references and hypotheses, and the reference lint (M1-3)
+reuses it, so a reference is checked in the form it is scored in.
+
+It differs from the build guide's sketch in two deliberate ways:
+
+- it removes all Unicode punctuation instead of a fixed list, so dashes, ellipses, curly
+  quotes and the double danda `॥` are removed too;
+- it deletes format characters, which the sketch leaves in place.
+
+Some side effects apply equally to both sides: `"NT-30GB"` becomes two words (`nt 30gb`),
+`"1.5"` becomes `1 5`, and `"50%"` becomes `50`.
+
+It does not transliterate. A hypothesis in the wrong script (for example Devanagari for
+Bangla, or `mobile` written in Bangla script) stays an error: later steps receive that text
+as written, so transliterating it here would hide an error they still see.
+
+Any change to `normalize` changes every WER number, so all evaluations are rerun after one.
