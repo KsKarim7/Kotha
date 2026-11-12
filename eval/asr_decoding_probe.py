@@ -8,6 +8,7 @@ from time import perf_counter
 import numpy as np
 from faster_whisper import WhisperModel
 
+from kotha.asr.whisper import join_segment_texts
 from kotha.audio.convert import SAMPLE_RATE_HZ, load_mono_16k
 
 FIXED_OPTIONS = {
@@ -27,6 +28,13 @@ CONFIGS: dict[str, dict] = {
     "beam5_cap": {"beam_size": 5, "temperature": 0.0, "max_new_tokens": None},
     "t0_nots": {"beam_size": 1, "temperature": 0.0, "without_timestamps": True},
     "beam5_nots": {"beam_size": 5, "temperature": 0.0, "without_timestamps": True},
+    "t0_nw": {"beam_size": 1, "temperature": 0.0, "word_timestamps": False},
+    "t0_nots_nw": {
+        "beam_size": 1,
+        "temperature": 0.0,
+        "without_timestamps": True,
+        "word_timestamps": False,
+    },
 }
 
 COLUMNS = (
@@ -95,13 +103,11 @@ class ProbeRow:
 
 def run_once(model: WhisperModel, audio_16k: np.ndarray, options: dict) -> RunStats:
     started = perf_counter()
-    segment_stream, _ = model.transcribe(audio_16k, **FIXED_OPTIONS, **options)
+    segment_stream, _ = model.transcribe(audio_16k, **{**FIXED_OPTIONS, **options})
     segments = list(segment_stream)
     seconds = perf_counter() - started
-    # Same joining rule as kotha.asr.whisper.WhisperAsr, so the texts are comparable.
-    segment_texts = (segment.text.strip() for segment in segments)
-    text = " ".join(text for text in segment_texts if text)
-    words = [word for segment in segments for word in segment.words]
+    text = join_segment_texts(segments)
+    words = [word for segment in segments for word in segment.words or ()]
     first_word_s = words[0].start if words else None
     last_word_end_s = words[-1].end if words else None
     if not segments:

@@ -31,7 +31,7 @@ def segment(
     temperature: float = 0.0,
     avg_logprob: float = -0.3,
     no_speech_prob: float = 0.1,
-    words: tuple[SimpleNamespace, ...] = (),
+    words: tuple[SimpleNamespace, ...] | None = (),
 ) -> SimpleNamespace:
     return SimpleNamespace(
         text=text,
@@ -40,7 +40,7 @@ def segment(
         temperature=temperature,
         avg_logprob=avg_logprob,
         no_speech_prob=no_speech_prob,
-        words=list(words),
+        words=None if words is None else list(words),
     )
 
 
@@ -207,8 +207,8 @@ def test_main_prints_one_row_per_config(
     main(["--clips", str(clip), "--device", "cpu", "--max-new-tokens", "50", "--runs", "2"])
     printed = rows(capsys.readouterr().out)
     assert [row[2] for row in printed] == list(CONFIGS)
-    assert [row[3] for row in printed] == ["1"] + ["2"] * 8
-    assert [row[6] for row in printed] == ["-"] + ["yes"] * 8
+    assert [row[3] for row in printed] == ["1"] + ["2"] * 10
+    assert [row[6] for row in printed] == ["-"] + ["yes"] * 10
     model = fake_model.instances[0]
     assert model.settings == ("small", "cpu", "int8_float16")
     assert [call.get("max_new_tokens") for call in model.calls if "max_new_tokens" in call] == [
@@ -223,6 +223,22 @@ def test_nots_configs_decode_without_timestamps(
     main(["--clips", str(clip), "--configs", config, "--runs", "1"])
     assert fake_model.instances[0].calls == [
         {**FIXED_OPTIONS, "beam_size": beam_size, "temperature": 0.0, "without_timestamps": True}
+    ]
+
+
+@pytest.mark.parametrize(
+    ("config", "timestamp_options"),
+    [
+        ("t0_nw", {"word_timestamps": False}),
+        ("t0_nots_nw", {"without_timestamps": True, "word_timestamps": False}),
+    ],
+)
+def test_configs_override_fixed_options(
+    fake_model: type[FakeModel], clip: Path, config: str, timestamp_options: dict
+) -> None:
+    main(["--clips", str(clip), "--configs", config, "--runs", "1"])
+    assert fake_model.instances[0].calls == [
+        {**FIXED_OPTIONS, "beam_size": 1, "temperature": 0.0, **timestamp_options}
     ]
 
 
@@ -266,6 +282,7 @@ def test_warmup_makes_one_untimed_call_with_the_first_config(
             ["1.00", "3", "2", "0.12", "2.50"],
         ),
         ([segment(" a ")], ["1.00", "0", "1", "-", "-"]),
+        ([segment(" a ", words=None)], ["1.00", "0", "1", "-", "-"]),
         ([], ["1.00", "0", "0", "-", "-"]),
     ],
 )

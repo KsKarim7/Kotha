@@ -12,7 +12,7 @@ SECRET_TEXT = "this transcript must never be printed"
 
 
 def transcript(text: str) -> Transcript:
-    return Transcript(text, "bn", -0.3, 0.1, ())
+    return Transcript(text, "bn", -0.3, 0.1, 1.2, 5, ())
 
 
 class FakeWhisperAsr:

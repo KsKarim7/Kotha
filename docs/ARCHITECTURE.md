@@ -76,17 +76,28 @@ These defaults are the blueprint's; the M2-4 hangover comparison will revisit th
 
 `kotha.asr.whisper.WhisperAsr` wraps faster-whisper (CTranslate2, no torch). It loads one
 model per instance and turns 16 kHz float32 audio into a `Transcript`: text, language, the
-worst segment `avg_logprob`, the highest `no_speech_prob`, and word timings.
+worst segment `avg_logprob`, the highest `no_speech_prob`, the highest compression ratio, the
+most tokens in one segment, and word timings when asked for.
 
 - By default it runs on CPU with int8 weights, which is also what CI tests.
 - On the local GPU it needs cuBLAS for CUDA 12 from the `gpu` dependency group and
   `LD_LIBRARY_PATH` set before Python starts; see the "Local GPU setup" section of
   `docs/runbook.md` and ADR 0004. `eval/asr_device_check.py` reports which compute types load
   and transcribe on a device.
-- Every call passes `condition_on_previous_text=False`, `word_timestamps=True` and
-  `vad_filter=False`, since the turn detector has already cut the audio.
+- Decoding follows ADR 0005 (proposed). Every call passes `temperature=0.0` (no fallback),
+  `without_timestamps=True` (the prompt both Bangla fine-tunes were trained with),
+  `condition_on_previous_text=False` and `vad_filter=False`, since the turn detector has
+  already cut the audio; `beam_size` defaults to 1 and there is no token cap.
+- Word timestamps are off by default, so a turn under 30 s decodes in one window. With
+  `word_timestamps=True` faster-whisper starts the next window at the last word's end, which
+  decodes the tail of the audio again; only post-call redaction (M10) asks for them.
+- `max_compression_ratio` and `max_segment_tokens` are raw loop signals, not a verdict. A
+  window stops at 224 tokens at most, and the caller (M8) decides what to reject.
+- `join_segment_texts` strips each segment's text, skips empty ones and joins the rest with
+  a space; the decoding probe uses the same function.
 - When Whisper returns no segments, the transcript is empty with `worst_avg_logprob` set to
-  -inf and `max_no_speech_prob` to 1.0; these are the wrapper's values, not the model's.
+  -inf, `max_no_speech_prob` to 1.0, `max_compression_ratio` to 0.0 and
+  `max_segment_tokens` to 0; these are the wrapper's values, not the model's.
 
 The live model and compute type are chosen in M3-6, from WER and the device check.
 
