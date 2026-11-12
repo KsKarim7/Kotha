@@ -5,6 +5,13 @@ import numpy as np
 from faster_whisper import WhisperModel
 from faster_whisper.transcribe import Segment
 
+DECODING_OPTIONS: dict[str, float | bool] = {
+    "temperature": 0.0,
+    "without_timestamps": True,
+    "condition_on_previous_text": False,
+    "vad_filter": False,
+}
+
 
 @dataclass(frozen=True)
 class Word:
@@ -53,11 +60,8 @@ class WhisperAsr:
             language=language,
             beam_size=beam_size,
             initial_prompt=initial_prompt,
-            temperature=0.0,
-            without_timestamps=True,
-            condition_on_previous_text=False,
             word_timestamps=word_timestamps,
-            vad_filter=False,
+            **DECODING_OPTIONS,
         )
         segments = list(segment_stream)
         if not segments:

@@ -108,3 +108,41 @@ for name in bn-tugstugi-medium bn-arif11-v7-small; do
     --quantization float16
 done
 ```
+
+## WER evaluation
+
+`eval/wer.py` transcribes one split of a manifest with `WhisperAsr`, using the decoding
+settings of ADR 0005, and scores it with the text normaliser. The manifest is committed at
+`data/testsets/asr_test.csv`, and the audio stays on G:. The manifest's `path` column is
+relative to the audio folder given as `--data-dir`.
+
+A dev run on the GPU, at 16 kHz and through simulated telephony:
+
+```bash
+cd ~/kotha && uv run python eval/wer.py --manifest data/testsets/asr_test.csv \
+  --data-dir /mnt/g/Kotha/data/testsets/asr --model models/bn-tugstugi-medium-ct2 \
+  --device cuda --compute-type int8_float16 --condition 16k 8k --split dev \
+  --output /mnt/g/Kotha/data/eval/dev-tugstugi-medium-cuda.csv
+```
+
+The same run on the CPU:
+
+```bash
+cd ~/kotha && uv run python eval/wer.py --manifest data/testsets/asr_test.csv \
+  --data-dir /mnt/g/Kotha/data/testsets/asr --model models/bn-tugstugi-medium-ct2 \
+  --device cpu --compute-type int8 --condition 16k 8k --split dev \
+  --output /mnt/g/Kotha/data/eval/dev-tugstugi-medium-cpu.csv
+```
+
+- `--language bn` (the default) forces Bangla for every row; `--language auto` lets Whisper
+  detect the language. Report which one a result used.
+- The script runs one untimed transcription first, so the latencies leave out model warm-up.
+  They time only the transcription, not loading the audio or simulating telephony.
+- It prints the run settings, then a table of WER, CER and latency p50 and p95 per condition
+  and language, with an `all` row per condition. CER counts Unicode code points including
+  spaces; say so wherever a CER is reported.
+- `--output` is a per-utterance CSV with the normalised reference and hypothesis. It holds
+  transcripts of consented test audio, so write it outside the repository (for example under
+  `/mnt/g/Kotha/data/eval/`) and never commit it. The script refuses an output path inside
+  the repository and creates missing folders.
+- Only numbers from a committed evaluation run go into `EVALUATION.md`.

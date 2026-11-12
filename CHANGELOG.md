@@ -29,6 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Conversion steps in the runbook for two Bangla Whisper fine-tunes (whisper-medium and whisper-small based), pinned to a commit and converted to CTranslate2 locally, and a `bengali_share` column in the decoding probe that shows how much of the output is in Bengali script.
 - No-timestamps configs (`t0_nots`, `beam5_nots`) in the decoding probe, a `--warmup` option that runs one untimed transcription before timing starts, and columns for clip length, word count, segment count and the first and last word times.
 - A WER and CER scoring core in `eval/wer.py`: manifest reading, split selection, and corpus-level WER and CER with latency p50 and p95 per condition and language, on references and hypotheses that both go through the text normaliser; jiwer is a dev dependency.
+- The WER evaluation command, `eval/wer.py`: it transcribes a manifest split with `WhisperAsr` at 16 kHz and through simulated telephony, after one untimed warm-up, prints the run settings and a WER, CER and latency table, and writes a per-utterance CSV that must go outside the repository. The fixed decoding options are one constant, `DECODING_OPTIONS`, in `kotha.asr.whisper`, and the runbook has a "WER evaluation" section.
 
 ### Changed
 
