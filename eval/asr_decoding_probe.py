@@ -1,5 +1,6 @@
 import argparse
 import statistics
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
@@ -40,6 +41,7 @@ COLUMNS = (
     "worst_avg_logprob",
     "max_no_speech_prob",
     "empty",
+    "bengali_share",
     "text",
 )
 
@@ -71,6 +73,7 @@ class ProbeRow:
     worst_avg_logprob: float
     max_no_speech_prob: float
     empty: bool
+    bengali_share: float | None
     text: str
 
 
@@ -96,6 +99,13 @@ def run_once(model: WhisperModel, audio_16k: np.ndarray, options: dict) -> RunSt
     )
 
 
+def bengali_share(text: str) -> float | None:
+    letters = [char for char in text if unicodedata.category(char)[0] in "LM"]
+    if not letters:
+        return None
+    return sum("\u0980" <= char <= "\u09ff" for char in letters) / len(letters)
+
+
 def summarize(clip: str, device: str, config: str, runs: list[RunStats]) -> ProbeRow:
     seconds = [run.seconds for run in runs]
     return ProbeRow(
@@ -112,6 +122,7 @@ def summarize(clip: str, device: str, config: str, runs: list[RunStats]) -> Prob
         worst_avg_logprob=min(run.worst_avg_logprob for run in runs),
         max_no_speech_prob=max(run.max_no_speech_prob for run in runs),
         empty=any(run.empty for run in runs),
+        bengali_share=bengali_share(runs[0].text),
         text=" ".join(runs[0].text.split()),
     )
 
@@ -165,6 +176,7 @@ def main(argv: list[str] | None = None) -> None:
                         f"{row.worst_avg_logprob:.3f}",
                         f"{row.max_no_speech_prob:.3f}",
                         "yes" if row.empty else "no",
+                        "-" if row.bengali_share is None else f"{row.bengali_share:.2f}",
                         row.text or "-",
                     ]
                 ),

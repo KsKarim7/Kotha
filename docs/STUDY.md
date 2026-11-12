@@ -97,3 +97,8 @@ Questions about code I haven't understood yet. Answer each one in my own words o
 | `services/api/kotha/text/normalize.py` | 6-10 | Why must references and hypotheses go through the same normaliser, and what would WER measure if they didn't? | |
 | `services/api/kotha/text/normalize.py` | 6-10 | Why must the normaliser not transliterate, even though it would lower WER on code-mixed speech? | |
 | `tests/test_text_normalize.py` | 53-55 | What does idempotence (`normalize(normalize(x)) == normalize(x)`) guarantee for stored references and reruns? | |
+| `docs/runbook.md` | 102-110 | What does CTranslate2 conversion change (file format, layer layout, vocabulary file), and how does quantizing at conversion (`--quantization float16`) differ from choosing a `compute_type` when the model is loaded? | |
+| `docs/runbook.md` | 90-96 | Why does faster-whisper need a fast-tokenizer `tokenizer.json`, and how does `save_pretrained` build one from `vocab.json`, `merges.txt` and the added tokens? | |
+| `docs/runbook.md` | 98-100 | Why can loading a pickle (`.bin`) run arbitrary code, and what does `torch.load(weights_only=True)` allow and refuse? | |
+| `docs/runbook.md` | 61-88 | Why convert from the source checkpoint at a pinned commit instead of downloading someone else's CTranslate2 conversion? | |
+| `eval/asr_decoding_probe.py` | 102-106 | What does `bengali_share` measure, and what does it miss (wrong words in Bengali script, misspellings, English written in Bengali script)? | |

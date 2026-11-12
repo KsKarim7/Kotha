@@ -7,7 +7,15 @@ import numpy as np
 import pytest
 import soundfile as sf
 
-from asr_decoding_probe import COLUMNS, CONFIGS, RunStats, main, run_once, summarize
+from asr_decoding_probe import (
+    COLUMNS,
+    CONFIGS,
+    RunStats,
+    bengali_share,
+    main,
+    run_once,
+    summarize,
+)
 from kotha.audio.convert import SAMPLE_RATE_HZ
 
 
@@ -43,11 +51,11 @@ def stats(
 
 class FakeModel:
     instances: list["FakeModel"] = []
+    segments = [segment(" hello ")]
 
     def __init__(self, model: str, *, device: str, compute_type: str) -> None:
         self.settings = (model, device, compute_type)
         self.calls: list[dict] = []
-        self.segments = [segment(" hello ")]
         FakeModel.instances.append(self)
 
     def transcribe(
@@ -139,6 +147,39 @@ def test_summarize_flags_differing_and_empty_runs() -> None:
 def test_summarize_leaves_repeatability_open_for_a_single_run() -> None:
     row = summarize("clip.wav", "cpu", "current", [stats(4.0, "a")])
     assert (row.runs, row.median_s, row.max_s, row.repeatable) == (1, 4.0, 4.0, None)
+
+
+@pytest.mark.parametrize(
+    ("text", "share"),
+    [
+        ("আমার নম্বর", 1.0),
+        ("आमार मुबायल", 0.0),
+        ("আমার mobile", 0.4),
+        ("আমার ৩০ 30, ৳২৯৯।", 1.0),
+        ("", None),
+        ("30 ৩০ !", None),
+    ],
+)
+def test_bengali_share_counts_letters_only(text: str, share: float | None) -> None:
+    assert bengali_share(text) == share
+
+
+@pytest.mark.parametrize(
+    ("segments", "printed_share"),
+    [([segment(" আমার ")], "1.00"), ([segment(" hello ")], "0.00"), ([], "-")],
+)
+def test_main_prints_the_bengali_share_of_the_first_run(
+    fake_model: type[FakeModel],
+    clip: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    segments: list[SimpleNamespace],
+    printed_share: str,
+) -> None:
+    monkeypatch.setattr(FakeModel, "segments", segments)
+    main(["--clips", str(clip), "--configs", "t0", "--runs", "1"])
+    [row] = rows(capsys.readouterr().out)
+    assert row[COLUMNS.index("bengali_share")] == printed_share
 
 
 def test_main_prints_one_row_per_config(
