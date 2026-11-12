@@ -10,6 +10,7 @@ import soundfile as sf
 from asr_decoding_probe import (
     COLUMNS,
     CONFIGS,
+    FIXED_OPTIONS,
     RunStats,
     bengali_share,
     main,
@@ -19,6 +20,10 @@ from asr_decoding_probe import (
 from kotha.audio.convert import SAMPLE_RATE_HZ
 
 
+def word(start: float, end: float) -> SimpleNamespace:
+    return SimpleNamespace(word=" w", start=start, end=end, probability=0.9)
+
+
 def segment(
     text: str,
     tokens: int = 5,
@@ -26,6 +31,7 @@ def segment(
     temperature: float = 0.0,
     avg_logprob: float = -0.3,
     no_speech_prob: float = 0.1,
+    words: tuple[SimpleNamespace, ...] = (),
 ) -> SimpleNamespace:
     return SimpleNamespace(
         text=text,
@@ -34,6 +40,7 @@ def segment(
         temperature=temperature,
         avg_logprob=avg_logprob,
         no_speech_prob=no_speech_prob,
+        words=list(words),
     )
 
 
@@ -45,7 +52,18 @@ def stats(
     max_no_speech_prob: float = 0.1,
 ) -> RunStats:
     return RunStats(
-        seconds, text, 5, 1.2, temperatures, worst_avg_logprob, max_no_speech_prob, not text
+        seconds,
+        text,
+        5,
+        1.2,
+        temperatures,
+        worst_avg_logprob,
+        max_no_speech_prob,
+        not text,
+        words=0,
+        segments=1,
+        first_word_s=None,
+        last_word_end_s=None,
     )
 
 
@@ -124,6 +142,7 @@ def test_summarize_repeatable_runs() -> None:
         "clip.wav",
         "cuda",
         "t0",
+        2.0,
         [
             stats(3.0, temperatures=(0.0,), worst_avg_logprob=-0.2, max_no_speech_prob=0.1),
             stats(1.0, temperatures=(0.0, 0.4), worst_avg_logprob=-0.9, max_no_speech_prob=0.3),
@@ -140,12 +159,12 @@ def test_summarize_repeatable_runs() -> None:
 
 
 def test_summarize_flags_differing_and_empty_runs() -> None:
-    row = summarize("clip.wav", "cpu", "current", [stats(1.0, "a  b\tc"), stats(1.0, "")])
+    row = summarize("clip.wav", "cpu", "current", 2.0, [stats(1.0, "a  b\tc"), stats(1.0, "")])
     assert (row.repeatable, row.empty, row.text) == (False, True, "a b c")
 
 
 def test_summarize_leaves_repeatability_open_for_a_single_run() -> None:
-    row = summarize("clip.wav", "cpu", "current", [stats(4.0, "a")])
+    row = summarize("clip.wav", "cpu", "current", 2.0, [stats(4.0, "a")])
     assert (row.runs, row.median_s, row.max_s, row.repeatable) == (1, 4.0, 4.0, None)
 
 
@@ -188,13 +207,93 @@ def test_main_prints_one_row_per_config(
     main(["--clips", str(clip), "--device", "cpu", "--max-new-tokens", "50", "--runs", "2"])
     printed = rows(capsys.readouterr().out)
     assert [row[2] for row in printed] == list(CONFIGS)
-    assert [row[3] for row in printed] == ["1", "2", "2", "2", "2", "2", "2"]
-    assert [row[6] for row in printed] == ["-", "yes", "yes", "yes", "yes", "yes", "yes"]
+    assert [row[3] for row in printed] == ["1"] + ["2"] * 8
+    assert [row[6] for row in printed] == ["-"] + ["yes"] * 8
     model = fake_model.instances[0]
     assert model.settings == ("small", "cpu", "int8_float16")
     assert [call.get("max_new_tokens") for call in model.calls if "max_new_tokens" in call] == [
         50
     ] * 4
+
+
+@pytest.mark.parametrize(("config", "beam_size"), [("t0_nots", 1), ("beam5_nots", 5)])
+def test_nots_configs_decode_without_timestamps(
+    fake_model: type[FakeModel], clip: Path, config: str, beam_size: int
+) -> None:
+    main(["--clips", str(clip), "--configs", config, "--runs", "1"])
+    assert fake_model.instances[0].calls == [
+        {**FIXED_OPTIONS, "beam_size": beam_size, "temperature": 0.0, "without_timestamps": True}
+    ]
+
+
+def test_warmup_makes_one_untimed_call_with_the_first_config(
+    fake_model: type[FakeModel],
+    clip: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    clock = count(step=10.0)
+    monkeypatch.setattr("asr_decoding_probe.perf_counter", lambda: next(clock))
+    main(
+        [
+            "--clips",
+            str(clip),
+            "--configs",
+            "t0",
+            "beam5_t0",
+            "--runs",
+            "1",
+            "--warmup",
+            "--budget-s",
+            "15",
+        ]
+    )
+    printed = rows(capsys.readouterr().out)
+    assert [(row[2], row[3]) for row in printed] == [("t0", "1"), ("beam5_t0", "skipped (budget)")]
+    assert printed[0][COLUMNS.index("median_s")] == "10.00"
+    warmup_call, t0_call = fake_model.instances[0].calls
+    assert warmup_call == t0_call
+
+
+@pytest.mark.parametrize(
+    ("segments", "word_columns"),
+    [
+        (
+            [
+                segment(" a b ", words=(word(0.12, 0.5), word(0.6, 1.0))),
+                segment(" c ", words=(word(1.8, 2.5),)),
+            ],
+            ["1.00", "3", "2", "0.12", "2.50"],
+        ),
+        ([segment(" a ")], ["1.00", "0", "1", "-", "-"]),
+        ([], ["1.00", "0", "0", "-", "-"]),
+    ],
+)
+def test_main_prints_the_word_timings_of_the_first_run(
+    fake_model: type[FakeModel],
+    clip: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    segments: list[SimpleNamespace],
+    word_columns: list[str],
+) -> None:
+    monkeypatch.setattr(FakeModel, "segments", segments)
+    main(["--clips", str(clip), "--configs", "t0", "--runs", "1"])
+    [row] = rows(capsys.readouterr().out)
+    first = COLUMNS.index("audio_s")
+    assert row[first : first + 5] == word_columns
+
+
+def test_word_columns_sit_between_bengali_share_and_text() -> None:
+    assert COLUMNS[COLUMNS.index("bengali_share") :] == (
+        "bengali_share",
+        "audio_s",
+        "words",
+        "segments",
+        "first_word_s",
+        "last_word_end_s",
+        "text",
+    )
 
 
 def test_main_runs_only_the_selected_configs(
