@@ -40,6 +40,38 @@ If transcribing fails with `Library libcublas.so.12 is not found or cannot be lo
 - run `echo $LD_LIBRARY_PATH` in a new terminal; it must contain the `nvidia/cublas/lib`
   path above.
 
+### GPU benchmark
+
+`eval/gpu_bench.py` times the stages of one transcription and records the GPU's state while
+they run. It loads the model once per compute type, does one untimed warm-up transcription,
+and then times `--runs` rounds of three stages: `features` (the log-Mel features of the clip),
+`encoder` (the encoder alone, on one padded 30 s window) and `whole` (a full transcription with
+the same settings as `WhisperAsr`).
+
+```bash
+cd ~/kotha && uv run python eval/gpu_bench.py --model models/bn-arif11-v7-small-ct2 \
+  --device cuda --compute-types float16 int8_float16 \
+  --clip /mnt/g/Kotha/data/k8_spectrogram.m4a
+```
+
+- `wall_*_ms` is elapsed time, and `wall_ms_runs` lists every run in order, so a slowdown
+  over time shows. `cpu_median_ms` is the CPU time of all threads of the process.
+- `cpu_wall_ratio` is CPU time over wall time. Above 1 means several threads were busy. Near 1
+  on cuda means one thread was busy the whole time: either the GPU path is CPU-bound (with
+  low `util_pct_median`) or a thread spin-waits for the GPU (with high utilisation).
+- `decode_ms_*` is the `whole` time minus the `encoder` and `features` times, an estimate of
+  the autoregressive decoder; `decode_ms_per_token` divides it by the tokens produced.
+- On cuda, `nvidia-smi` is sampled every `--sample-ms` (default 100). Each stage gets the
+  P-states seen, the SM clock (median, max, limit), power, utilisation, temperature and the
+  active clock event reasons (for example `sw_power_cap` or `sw_thermal_slowdown`); the
+  `*_runs` columns repeat clock, power, temperature and reasons per run. A stage shorter than
+  one sample interval may have no samples.
+- Starting `nvidia-smi` briefly wakes the GPU, so `--sample-ms 0` turns sampling off for a
+  control run. `--stages` limits the run to some stages, for example
+  `--stages encoder --runs 30` to watch the GPU under sustained load.
+- No transcript text is printed. These timings describe one machine in one state; they are
+  not latency results for `EVALUATION.md`.
+
 ## Bangla Whisper models
 
 Two Bangla fine-tunes of Whisper, converted to CTranslate2 so that faster-whisper can load
