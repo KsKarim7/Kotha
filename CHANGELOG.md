@@ -30,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - No-timestamps configs (`t0_nots`, `beam5_nots`) in the decoding probe, a `--warmup` option that runs one untimed transcription before timing starts, and columns for clip length, word count, segment count and the first and last word times.
 - A WER and CER scoring core in `eval/wer.py`: manifest reading, split selection, and corpus-level WER and CER with latency p50 and p95 per condition and language, on references and hypotheses that both go through the text normaliser; jiwer is a dev dependency.
 - The WER evaluation command, `eval/wer.py`: it transcribes a manifest split with `WhisperAsr` at 16 kHz and through simulated telephony, after one untimed warm-up, prints the run settings and a WER, CER and latency table, and writes a per-utterance CSV that must go outside the repository. The fixed decoding options are one constant, `DECODING_OPTIONS`, in `kotha.asr.whisper`, and the runbook has a "WER evaluation" section.
+- A loanword-agnostic score next to the strict one: `data/testsets/loanwords.csv` lists accepted Bengali-script spellings of English loanwords, and `eval/wer.py` reports `lexicon_wer` and `lexicon_cer` after mapping those spellings to Latin on both sides (`--lexicon`, the header, the table and the per-utterance CSV). `wer` and `cer` stay the primary scores and are unchanged.
 
 ### Changed
 

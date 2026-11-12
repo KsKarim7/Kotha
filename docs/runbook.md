@@ -146,3 +146,24 @@ cd ~/kotha && uv run python eval/wer.py --manifest data/testsets/asr_test.csv \
   `/mnt/g/Kotha/data/eval/`) and never commit it. The script refuses an output path inside
   the repository and creates missing folders.
 - Only numbers from a committed evaluation run go into `EVALUATION.md`.
+
+### Loanword lexicon and `lexicon_wer`
+
+The references write English loanwords in Latin script ("mobile balance"), while the Bangla
+fine-tunes write them in Bengali script ("মোবাইল ব্যালেন্স"). Strict WER counts every such
+word as an error, even when the model heard it right.
+
+- `wer` and `cer` are the primary scores. `lexicon_wer` and `lexicon_cer` are a secondary,
+  loanword-agnostic score, and must always be reported with that label, never as "the WER".
+- For the secondary score, both the reference and the hypothesis are normalised as usual, and
+  then every whole word listed in the lexicon is replaced by its Latin form. With an empty
+  lexicon the two scores are equal. `lexicon_cer` counts the code points of the mapped text.
+- The lexicon is `data/testsets/loanwords.csv` (columns `latin,bangla`, one row per accepted
+  Bengali spelling), passed with `--lexicon` (default: that file). It is part of the
+  transcription guideline (K2), which owns it; the text normaliser itself never
+  transliterates.
+- Only list loanwords. An ordinary Bangla word that also stands for an English one (such as
+  নম্বর for "number") must not be listed, because mapping it would hide real errors. কল and
+  সিম are also ordinary Bangla words, kept for the telecom domain.
+- The lexicon replaces whole words only, so these still count as errors: attached suffixes
+  ("প্যাকেজটা"), number words ("থার্টি" for 30), and spellings not in the list.
