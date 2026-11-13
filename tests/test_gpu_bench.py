@@ -31,36 +31,51 @@ def sample(
     util_pct: float | None = 90.0,
     temp_c: float | None = 60.0,
     reasons: tuple[str, ...] = (),
+    *,
+    mem_mhz: float | None = 6000.0,
 ) -> GpuSample:
-    return GpuSample(at, pstate, sm_mhz, 1785.0, power_w, util_pct, temp_c, reasons)
+    return GpuSample(
+        at, pstate, sm_mhz, 1785.0, mem_mhz, 6001.0, power_w, util_pct, temp_c, reasons
+    )
 
 
 def test_parse_sample_reads_values_and_active_reasons() -> None:
     line = (
-        f"P0, 1785, 1785, 30.50, 97, 66, {NOT_ACTIVE}, Active, {NOT_ACTIVE}, {NOT_ACTIVE}, "
-        f"Active, {NOT_ACTIVE}\n"
+        f"P0, 1785, 1785, 6000, 6001, 30.50, 97, 66, {NOT_ACTIVE}, Active, {NOT_ACTIVE}, "
+        f"{NOT_ACTIVE}, Active, {NOT_ACTIVE}\n"
     )
     assert parse_sample(line, 1.5) == GpuSample(
-        1.5, "P0", 1785.0, 1785.0, 30.5, 97.0, 66.0, ("sw_power_cap", "sw_thermal_slowdown")
+        1.5,
+        "P0",
+        1785.0,
+        1785.0,
+        6000.0,
+        6001.0,
+        30.5,
+        97.0,
+        66.0,
+        ("sw_power_cap", "sw_thermal_slowdown"),
     )
 
 
 def test_parse_sample_turns_not_available_into_none() -> None:
-    line = f"P8, 375, 1785, [N/A], 0, 53, Active, {', '.join([NOT_ACTIVE] * 5)}"
+    line = f"P8, 375, 1785, [N/A], [N/A], [N/A], 0, 53, Active, {', '.join([NOT_ACTIVE] * 5)}"
     parsed = parse_sample(line, 0.0)
-    assert (parsed.pstate, parsed.sm_mhz, parsed.power_w, parsed.reasons) == (
-        "P8",
-        375.0,
-        None,
-        ("gpu_idle",),
-    )
+    assert (
+        parsed.pstate,
+        parsed.sm_mhz,
+        parsed.mem_mhz,
+        parsed.mem_mhz_limit,
+        parsed.power_w,
+        parsed.reasons,
+    ) == ("P8", 375.0, None, None, None, ("gpu_idle",))
 
 
 def test_summarise_samples_takes_medians_maxima_and_any_active_reason() -> None:
     samples = [
-        sample(0.0, "P0", 1785.0, 30.0, 90.0, 60.0),
-        sample(0.1, "P2", 1500.0, 20.0, 70.0, 65.0, ("sw_power_cap",)),
-        sample(0.2, "P0", 1600.0, None, 80.0, 62.0),
+        sample(0.0, "P0", 1785.0, 30.0, 90.0, 60.0, mem_mhz=6000.0),
+        sample(0.1, "P2", 1500.0, 20.0, 70.0, 65.0, ("sw_power_cap",), mem_mhz=810.0),
+        sample(0.2, "P0", 1600.0, None, 80.0, 62.0, mem_mhz=5000.0),
     ]
     assert summarise_samples(samples) == GpuSummary(
         samples=3,
@@ -68,6 +83,9 @@ def test_summarise_samples_takes_medians_maxima_and_any_active_reason() -> None:
         sm_mhz_median=1600.0,
         sm_mhz_max=1785.0,
         sm_mhz_limit=1785.0,
+        mem_mhz_median=5000.0,
+        mem_mhz_max=6000.0,
+        mem_mhz_limit=6001.0,
         power_w_median=25.0,
         power_w_max=30.0,
         util_pct_median=80.0,
@@ -94,9 +112,9 @@ def test_decode_time_per_token() -> None:
 def test_format_row_for_a_sampled_cuda_stage() -> None:
     runs = [StageRun(0.0, 1.0, 1000.0, 1100.0), StageRun(2.0, 3.0, 1200.0, 1300.0)]
     samples = [
-        sample(0.5, "P0", 1785.0, 30.0, 90.0, 60.0),
-        sample(2.5, "P2", 1505.0, 20.0, 70.0, 65.0, ("sw_power_cap",)),
-        sample(5.0, "P8", 375.0, 5.0, 0.0, 50.0, ("gpu_idle",)),
+        sample(0.5, "P0", 1785.0, 30.0, 90.0, 60.0, mem_mhz=6000.0),
+        sample(2.5, "P2", 1505.0, 20.0, 70.0, 65.0, ("sw_power_cap",), mem_mhz=810.0),
+        sample(5.0, "P8", 375.0, 5.0, 0.0, 50.0, ("gpu_idle",), mem_mhz=405.0),
     ]
     row = format_row(
         "int8_float16", "whole", runs, samples, "1238/4096", [170, 170], [680.0, 850.0]
@@ -119,17 +137,34 @@ def test_format_row_for_a_sampled_cuda_stage() -> None:
         "1645",
         "1785",
         "1785",
+        "3405",
+        "6000",
+        "6001",
         "25.0",
         "30.0",
         "80",
         "65",
         "sw_power_cap",
         "1785,1505",
+        "6000,810",
         "30.0,20.0",
         "60,65",
         "none,sw_power_cap",
     ]
-    assert len(row.split("\t")) == len(COLUMNS)
+    assert len(row.split("\t")) == len(COLUMNS) == 30
+
+
+def test_memory_clock_columns_follow_the_sm_columns() -> None:
+    limit = COLUMNS.index("sm_mhz_limit")
+    assert COLUMNS[limit : limit + 5] == (
+        "sm_mhz_limit",
+        "mem_mhz_median",
+        "mem_mhz_max",
+        "mem_mhz_limit",
+        "power_w_median",
+    )
+    runs = COLUMNS.index("sm_mhz_runs")
+    assert COLUMNS[runs : runs + 3] == ("sm_mhz_runs", "mem_mhz_runs", "power_w_runs")
 
 
 def test_format_row_without_samples_prints_dashes_for_the_gpu() -> None:

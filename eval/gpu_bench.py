@@ -30,6 +30,8 @@ SAMPLE_FIELDS = (
     "pstate",
     "clocks.sm",
     "clocks.max.sm",
+    "clocks.mem",
+    "clocks.max.mem",
     "power.draw",
     "utilization.gpu",
     "temperature.gpu",
@@ -53,12 +55,16 @@ COLUMNS = (
     "sm_mhz_median",
     "sm_mhz_max",
     "sm_mhz_limit",
+    "mem_mhz_median",
+    "mem_mhz_max",
+    "mem_mhz_limit",
     "power_w_median",
     "power_w_max",
     "util_pct_median",
     "temp_c_max",
     "active_reasons",
     "sm_mhz_runs",
+    "mem_mhz_runs",
     "power_w_runs",
     "temp_c_runs",
     "reasons_runs",
@@ -73,6 +79,8 @@ class GpuSample:
     pstate: str | None
     sm_mhz: float | None
     sm_mhz_limit: float | None
+    mem_mhz: float | None
+    mem_mhz_limit: float | None
     power_w: float | None
     util_pct: float | None
     temp_c: float | None
@@ -94,6 +102,9 @@ class GpuSummary:
     sm_mhz_median: float | None
     sm_mhz_max: float | None
     sm_mhz_limit: float | None
+    mem_mhz_median: float | None
+    mem_mhz_max: float | None
+    mem_mhz_limit: float | None
     power_w_median: float | None
     power_w_max: float | None
     util_pct_median: float | None
@@ -107,17 +118,19 @@ def number(value: str) -> float | None:
 
 def parse_sample(line: str, at: float) -> GpuSample:
     values = [value.strip() for value in line.split(",")]
-    pstate, sm_mhz, sm_mhz_limit, power_w, util_pct, temp_c, *reason_flags = values
+    pstate, sm_mhz, sm_mhz_limit, mem_mhz, mem_mhz_limit, power_w, util_pct, temp_c, *flags = values
     return GpuSample(
         at=at,
         pstate=None if pstate in ("[N/A]", "N/A") else pstate,
         sm_mhz=number(sm_mhz),
         sm_mhz_limit=number(sm_mhz_limit),
+        mem_mhz=number(mem_mhz),
+        mem_mhz_limit=number(mem_mhz_limit),
         power_w=number(power_w),
         util_pct=number(util_pct),
         temp_c=number(temp_c),
         reasons=tuple(
-            reason for reason, flag in zip(REASONS, reason_flags, strict=True) if flag == "Active"
+            reason for reason, flag in zip(REASONS, flags, strict=True) if flag == "Active"
         ),
     )
 
@@ -193,6 +206,9 @@ def summarise_samples(samples: Sequence[GpuSample]) -> GpuSummary | None:
         sm_mhz_median=median_or_none([sample.sm_mhz for sample in samples]),
         sm_mhz_max=max_or_none([sample.sm_mhz for sample in samples]),
         sm_mhz_limit=max_or_none([sample.sm_mhz_limit for sample in samples]),
+        mem_mhz_median=median_or_none([sample.mem_mhz for sample in samples]),
+        mem_mhz_max=max_or_none([sample.mem_mhz for sample in samples]),
+        mem_mhz_limit=max_or_none([sample.mem_mhz_limit for sample in samples]),
         power_w_median=median_or_none([sample.power_w for sample in samples]),
         power_w_max=max_or_none([sample.power_w for sample in samples]),
         util_pct_median=median_or_none([sample.util_pct for sample in samples]),
@@ -270,6 +286,7 @@ def per_run_cells(runs: Sequence[StageRun], samples: Sequence[GpuSample]) -> lis
     windows = [samples_between(samples, run.start, run.end) for run in runs]
     return [
         ",".join(cell(median_or_none([s.sm_mhz for s in window])) for window in windows),
+        ",".join(cell(median_or_none([s.mem_mhz for s in window])) for window in windows),
         ",".join(cell(median_or_none([s.power_w for s in window]), 1) for window in windows),
         ",".join(cell(max_or_none([s.temp_c for s in window])) for window in windows),
         ",".join(run_reasons(window) for window in windows),
@@ -278,13 +295,16 @@ def per_run_cells(runs: Sequence[StageRun], samples: Sequence[GpuSample]) -> lis
 
 def summary_cells(summary: GpuSummary | None) -> list[str]:
     if summary is None:
-        return ["0"] + ["-"] * 9
+        return ["0"] + ["-"] * 12
     return [
         str(summary.samples),
         ",".join(summary.pstates) or "-",
         cell(summary.sm_mhz_median),
         cell(summary.sm_mhz_max),
         cell(summary.sm_mhz_limit),
+        cell(summary.mem_mhz_median),
+        cell(summary.mem_mhz_max),
+        cell(summary.mem_mhz_limit),
         cell(summary.power_w_median, 1),
         cell(summary.power_w_max, 1),
         cell(summary.util_pct_median),
@@ -322,7 +342,7 @@ def format_row(
         stage_samples = [s for run in runs for s in samples_between(samples, run.start, run.end)]
         gpu_cells = summary_cells(summarise_samples(stage_samples)) + per_run_cells(runs, samples)
     else:
-        gpu_cells = ["-"] * 14
+        gpu_cells = ["-"] * (len(COLUMNS) - COLUMNS.index("samples"))
     return "\t".join(
         [
             compute_type,
