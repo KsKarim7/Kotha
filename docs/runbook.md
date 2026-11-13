@@ -66,6 +66,9 @@ cd ~/kotha && uv run python eval/gpu_bench.py --model models/bn-arif11-v7-small-
   active clock event reasons (for example `sw_power_cap` or `sw_thermal_slowdown`); the
   `*_runs` columns repeat clock, power, temperature and reasons per run. A stage shorter than
   one sample interval may have no samples.
+- `mem_mhz_*` and `mem_mhz_runs` give the memory clock (median, max, limit, and per run) in
+  the same way as the SM clock; it follows the P-state, for example 6000 MHz in P0 and
+  405 MHz in P8 on the GTX 1650.
 - Starting `nvidia-smi` briefly wakes the GPU, so `--sample-ms 0` turns sampling off for a
   control run. `--stages` limits the run to some stages, for example
   `--stages encoder --runs 30` to watch the GPU under sustained load.
