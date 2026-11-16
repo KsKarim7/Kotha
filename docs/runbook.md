@@ -147,8 +147,8 @@ done
 ## WER evaluation
 
 `eval/wer.py` transcribes one split of a manifest with `WhisperAsr`, using the decoding
-settings of ADR 0005, and scores it with the text normaliser. The manifest is committed at
-`data/testsets/asr_test.csv`, and the audio stays on G:. The manifest's `path` column is
+settings of ADR 0005, and scores it with the text normaliser. The manifest will be committed at
+`data/testsets/asr_test.csv` (M1-6), and the audio stays on G:. The manifest's `path` column is
 relative to the audio folder given as `--data-dir`.
 
 A dev run on the GPU, at 16 kHz and through simulated telephony:
@@ -181,6 +181,10 @@ cd ~/kotha && uv run python eval/wer.py --manifest data/testsets/asr_test.csv \
   `/mnt/g/Kotha/data/eval/`) and never commit it. The script refuses an output path inside
   the repository and creates missing folders.
 - Only numbers from a committed evaluation run go into `EVALUATION.md`.
+- Rows of speakers who said No to publishing their text are kept in a private manifest next to
+  the audio on G: and are never committed. A full evaluation passes that private manifest to
+  `--manifest` (or a merged copy kept outside the repository), and `EVALUATION.md` states how
+  many rows are private (ADR 0002).
 
 ### Loanword lexicon and `lexicon_wer`
 
