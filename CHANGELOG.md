@@ -32,6 +32,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The WER evaluation command, `eval/wer.py`: it transcribes a manifest split with `WhisperAsr` at 16 kHz and through simulated telephony, after one untimed warm-up, prints the run settings and a WER, CER and latency table, and writes a per-utterance CSV that must go outside the repository. The fixed decoding options are one constant, `DECODING_OPTIONS`, in `kotha.asr.whisper`, and the runbook has a "WER evaluation" section.
 - A loanword-agnostic score next to the strict one: `data/testsets/loanwords.csv` lists accepted Bengali-script spellings of English loanwords, and `eval/wer.py` reports `lexicon_wer` and `lexicon_cer` after mapping those spellings to Latin on both sides (`--lexicon`, the header, the table and the per-utterance CSV). `wer` and `cer` stay the primary scores and are unchanged.
 - A GPU micro-benchmark, `eval/gpu_bench.py`, that times feature extraction, the encoder and a whole transcription per compute type (wall and CPU time, decode time per token) while sampling the GPU's P-state, SM and memory clocks, power, temperature and clock event reasons, and a "GPU benchmark" subsection in the runbook.
+- A transcription guideline for the ASR test set in `data/testsets/GUIDELINE.md`, ADR 0002 on consent, storage, retention and publication of test-set recordings, and `card` in the loanword lexicon.
 
 ### Changed
 
