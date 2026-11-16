@@ -40,3 +40,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `uv sync` now installs `kotha` as an editable package, so scripts can import it without `PYTHONPATH`.
 - `WhisperAsr` decodes at a single temperature of 0.0 without timestamps, with word timings off unless asked for, and `Transcript` reports the highest compression ratio and the most tokens in one segment (ADR 0005, proposed). The segment-joining rule is now `join_segment_texts`, which the decoding probe imports; probe configs can override its fixed options, and it has two configs without word timings.
+- The runbook records the Windows and NVIDIA power settings the local GPU needs, a check with `eval/gpu_bench.py` to run before timing anything on cuda, where benchmark output is kept, and that cuda latency in a WER run counts only after that check.

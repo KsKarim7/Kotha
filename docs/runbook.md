@@ -40,6 +40,31 @@ If transcribing fails with `Library libcublas.so.12 is not found or cannot be lo
 - run `echo $LD_LIBRARY_PATH` in a new terminal; it must contain the `nvidia/cublas/lib`
   path above.
 
+### Power settings (Windows side)
+
+Timings on `cuda` depend on Windows keeping the GPU at full clock. Without these settings, the
+GPU ran in a power-saving state that made cuda slower than cpu (PR #33, PR #34).
+
+- The laptop charger is plugged in.
+- Windows Settings > System > Power & battery > Power mode: "Plugged in" = Best Performance.
+- NVIDIA Control Panel > 3D Settings > Manage 3D settings > Global Settings tab: scroll the
+  Settings list to "Power management mode", choose "Prefer maximum performance", then Apply.
+  On some machines the same setting is in the NVIDIA App under Graphics > Global Settings.
+- Restart Windows after changing them; a Windows restart also restarts WSL.
+
+#### Check before timing anything on the GPU
+
+```bash
+cd ~/kotha && uv run python eval/gpu_bench.py --model models/bn-arif11-v7-small-ct2 \
+  --device cuda --compute-types int8_float16 --stages encoder --runs 30 \
+  --clip /mnt/g/Kotha/data/k8_spectrogram.m4a
+```
+
+Healthy means `pstates` is `P0` and every value in `sm_mhz_runs` equals `sm_mhz_limit`. The
+first one or two runs may show `-` because `nvidia-smi` hasn't sent its first sample yet; that
+doesn't count against the check. If any run shows 855 MHz or 1380 MHz, the settings above
+aren't in effect.
+
 ### GPU benchmark
 
 `eval/gpu_bench.py` times the stages of one transcription and records the GPU's state while
@@ -74,6 +99,10 @@ cd ~/kotha && uv run python eval/gpu_bench.py --model models/bn-arif11-v7-small-
   `--stages encoder --runs 30` to watch the GPU under sustained load.
 - No transcript text is printed. These timings describe one machine in one state; they are
   not latency results for `EVALUATION.md`.
+- Save output worth keeping outside the repository with
+  `| tee /mnt/g/Kotha/data/eval/gpu/<date>-<what>.tsv`, because `/tmp` is cleared when WSL
+  restarts. The reference run with the settings above is
+  `2026-11-13-nvidia-max-{burst,B-whole,A-whole}.tsv`.
 
 ## Bangla Whisper models
 
@@ -245,6 +274,8 @@ cd ~/kotha && uv run python eval/wer.py --manifest data/testsets/asr_test.csv \
   detect the language. Report which one a result used.
 - The script runs one untimed transcription first, so the latencies leave out model warm-up.
   They time only the transcription, not loading the audio or simulating telephony.
+- Latency from a cuda run counts only if the GPU check (Local GPU setup) passed in the same
+  session. Every report of latency states the device, the compute type and the GPU state.
 - It prints the run settings, then a table of WER, CER and latency p50 and p95 per condition
   and language, with an `all` row per condition. CER counts Unicode code points including
   spaces; say so wherever a CER is reported.
