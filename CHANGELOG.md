@@ -34,6 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A GPU micro-benchmark, `eval/gpu_bench.py`, that times feature extraction, the encoder and a whole transcription per compute type (wall and CPU time, decode time per token) while sampling the GPU's P-state, SM and memory clocks, power, temperature and clock event reasons, and a "GPU benchmark" subsection in the runbook.
 - A transcription guideline for the ASR test set in `data/testsets/GUIDELINE.md`, ADR 0002 on consent, storage, retention and publication of test-set recordings, and `card` in the loanword lexicon.
 - A manifest validator, `eval/validate_manifest.py`, that checks one or more manifests and their audio (allowed values, speaker codes, unique ids and paths, paths inside `--data-dir`, files that exist and that soundfile can read, duration bounds), warns about container mismatches, low sample rates, extra channels and mixed codecs or sample rates, prints a summary of the set without any reference text, and exits 1 on errors; a "Checking a manifest" section in the runbook.
+- A reference-text lint, `eval/lint_references.py`, that checks manifest references against the transcription guideline (empty, not already normalised with the first differing code point and its kind, the taka sign, `lang` against the letters used, loanwords in Bengali script), warns about joined numbers and units, Bangla suffixes attached to Latin words and filler words, never prints reference text, and exits 1 on errors; a "Checking references" section in the runbook.
 
 ### Changed
 
