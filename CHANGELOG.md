@@ -33,6 +33,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A loanword-agnostic score next to the strict one: `data/testsets/loanwords.csv` lists accepted Bengali-script spellings of English loanwords, and `eval/wer.py` reports `lexicon_wer` and `lexicon_cer` after mapping those spellings to Latin on both sides (`--lexicon`, the header, the table and the per-utterance CSV). `wer` and `cer` stay the primary scores and are unchanged.
 - A GPU micro-benchmark, `eval/gpu_bench.py`, that times feature extraction, the encoder and a whole transcription per compute type (wall and CPU time, decode time per token) while sampling the GPU's P-state, SM and memory clocks, power, temperature and clock event reasons, and a "GPU benchmark" subsection in the runbook.
 - A transcription guideline for the ASR test set in `data/testsets/GUIDELINE.md`, ADR 0002 on consent, storage, retention and publication of test-set recordings, and `card` in the loanword lexicon.
+- A manifest validator, `eval/validate_manifest.py`, that checks one or more manifests and their audio (allowed values, speaker codes, unique ids and paths, paths inside `--data-dir`, files that exist and that soundfile can read, duration bounds), warns about container mismatches, low sample rates, extra channels and mixed codecs or sample rates, prints a summary of the set without any reference text, and exits 1 on errors; a "Checking a manifest" section in the runbook.
 
 ### Changed
 

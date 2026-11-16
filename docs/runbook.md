@@ -144,6 +144,40 @@ for name in bn-tugstugi-medium bn-arif11-v7-small; do
 done
 ```
 
+## Checking a manifest
+
+`eval/validate_manifest.py` checks one or more manifests and their audio before any
+evaluation run, and prints a summary of the set. For the public manifest alone:
+
+```bash
+cd ~/kotha && uv run python eval/validate_manifest.py --manifest data/testsets/asr_test.csv \
+  --data-dir /mnt/g/Kotha/data/testsets/asr
+```
+
+With the private manifest that sits next to the audio on G: (ADR 0002), give both; ids and
+paths must then be unique across the two:
+
+```bash
+cd ~/kotha && uv run python eval/validate_manifest.py \
+  --manifest data/testsets/asr_test.csv /mnt/g/Kotha/data/testsets/asr/asr_private.csv \
+  --data-dir /mnt/g/Kotha/data/testsets/asr
+```
+
+- Errors are printed as `<manifest>:<line> <id>: <problem>`: a value outside the allowed
+  `lang`, `noise`, `split` or speaker code, an empty id, text or path, a repeated id or path,
+  a path that is absolute, contains `..` or leads outside `--data-dir`, a missing file, a file
+  soundfile can't read (a real AAC `.m4a` can't be read; convert it to WAV or FLAC first), and
+  a duration outside `--min-s` and `--max-s` (default 0.5 to 30 s, both ends allowed).
+- Warnings don't fail the check: a container that doesn't match the file extension (for
+  example MP3 data in a `.m4a` file), a sample rate below 16000 Hz, more than one channel,
+  and more than one codec or sample rate in the whole set.
+- The summary gives rows, speakers and minutes, a lang x noise table, clips and minutes per
+  speaker and per split, and the codecs and sample rates seen. Minutes count only files that
+  soundfile can read, and values outside the allowed ones are grouped as `other`.
+- The exit code is 1 if there is any error, else 0.
+- The output never contains reference text or the invalid values themselves; open the
+  manifest at the reported line to see them.
+
 ## WER evaluation
 
 `eval/wer.py` transcribes one split of a manifest with `WhisperAsr`, using the decoding
