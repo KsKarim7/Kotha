@@ -178,6 +178,44 @@ cd ~/kotha && uv run python eval/validate_manifest.py \
 - The output never contains reference text or the invalid values themselves; open the
   manifest at the reported line to see them.
 
+## Checking references
+
+`eval/lint_references.py` checks the `text` column against `data/testsets/GUIDELINE.md`, so
+that references are already in the form the text normaliser produces. For the public
+manifest alone, and with the private one:
+
+```bash
+cd ~/kotha && uv run python eval/lint_references.py --manifest data/testsets/asr_test.csv
+cd ~/kotha && uv run python eval/lint_references.py \
+  --manifest data/testsets/asr_test.csv /mnt/g/Kotha/data/testsets/asr/asr_private.csv
+```
+
+Problems are printed as `<manifest>:<line> <id>: <problem>`. Errors:
+
+- `empty reference`.
+- `not normalised at position N: U+XXXX NAME (kind)` (rule 1): the reference differs from
+  `normalize(reference)`, first at code point N (counted from 1; an editor may count Bangla
+  characters differently). The kind is punctuation, Bangla digit, uppercase letter, extra or
+  odd whitespace, invisible character, or not NFC. A precomposed য় (U+09DF), ড় or ঢ় is not
+  NFC; type the letter and its nukta (়) as two code points, as a Unicode keyboard does.
+  Only the first difference is shown; run the lint again after fixing it.
+- `taka sign ৳, write the word টাকা (rule 3)`.
+- `lang bn contains Latin letters`, `lang en contains Bengali letters`, `lang mix needs both
+  Bengali and Latin letters` (rule 7; digits don't count).
+- `word N: loanword in Bengali script, write it as '<latin>' (rule 2)`: the word is a
+  spelling in the loanword lexicon (`--lexicon`, default `data/testsets/loanwords.csv`).
+
+Warnings, which don't change the exit code:
+
+- `word N: number and unit joined (rule 3)`, for example `30gb`; digits alone are fine.
+- `word N: Latin word with a Bangla suffix attached ... (rule 4)`, for example `packageটা`.
+- `word N: filler word, leave it out (rule 5)`: আ, উম, এ, uh, um or hmm as a whole word.
+  এ is also an ordinary Bangla word, so check the audio before removing it.
+
+Words are counted in the normalised reference. The last line is `N errors, M warnings`, and
+the exit code is 1 if there is any error. The output never contains reference text, so open
+the manifest at the reported line to see the problem.
+
 ## WER evaluation
 
 `eval/wer.py` transcribes one split of a manifest with `WhisperAsr`, using the decoding
