@@ -9,6 +9,7 @@ from time import perf_counter
 
 import jiwer
 
+from error_analysis import BENGALI_BLOCK, Substitution, category_counts, top_substitutions
 from kotha.asr.whisper import DECODING_OPTIONS, WhisperAsr
 from kotha.audio.convert import load_mono_16k
 from kotha.audio.telephony import simulate_telephony
@@ -21,7 +22,7 @@ NORMALISER = "kotha.text.normalize.normalize"
 REPO_ROOT = Path(__file__).resolve().parent.parent
 LEXICON_PATH = REPO_ROOT / "data" / "testsets" / "loanwords.csv"
 LEXICON_COLUMNS = ("latin", "bangla")
-BENGALI_BLOCK = range(0x0980, 0x0A00)
+SUBSTITUTION_COLUMNS = ("condition", "ref", "hyp", "count", "category")
 
 
 @dataclass(frozen=True)
@@ -265,8 +266,24 @@ def transcribe_all(
     ]
 
 
+def substitutions_by_condition(
+    results: Sequence[Result], lexicon: Mapping[str, str]
+) -> dict[str, list[Substitution]]:
+    pairs_by_condition: dict[str, list[tuple[str, str]]] = defaultdict(list)
+    for result, pair in zip(results, normalised_pairs(results), strict=True):
+        pairs_by_condition[result.condition].append(pair)
+    return {
+        condition: top_substitutions(pairs, lexicon)
+        for condition, pairs in pairs_by_condition.items()
+    }
+
+
 def print_summary(
-    args: argparse.Namespace, row_count: int, lexicon_size: int, scores: Sequence[GroupScore]
+    args: argparse.Namespace,
+    row_count: int,
+    lexicon_size: int,
+    scores: Sequence[GroupScore],
+    substitutions: Mapping[str, Sequence[Substitution]],
 ) -> None:
     decoding = {"beam_size": BEAM_SIZE, **DECODING_OPTIONS}
     print(f"model: {args.model}")
@@ -287,6 +304,13 @@ def print_summary(
             f"\t{group.latency_p50_s:.2f}\t{group.latency_p95_s:.2f}"
         )
     print()
+    for condition, condition_substitutions in substitutions.items():
+        counts = category_counts(condition_substitutions)
+        print(
+            f"{condition} substitutions: "
+            + ", ".join(f"{category} {count}" for category, count in counts.items())
+        )
+    print()
     print("CER counts Unicode code points including spaces")
     print(
         "wer/cer are the primary scores; lexicon_wer/lexicon_cer map the lexicon's "
@@ -302,6 +326,21 @@ def write_utterances(path: Path, scores: Sequence[UtteranceScore]) -> None:
         )
         writer.writeheader()
         writer.writerows(asdict(utterance) for utterance in scores)
+
+
+def substitutions_path(output: Path) -> Path:
+    return output.with_name(f"{output.stem}.substitutions.csv")
+
+
+def write_substitutions(path: Path, substitutions: Mapping[str, Sequence[Substitution]]) -> None:
+    with path.open("w", newline="", encoding="utf-8") as csv_file:
+        writer = csv.writer(csv_file)
+        writer.writerow(SUBSTITUTION_COLUMNS)
+        for condition, condition_substitutions in substitutions.items():
+            writer.writerows(
+                (condition, item.ref, item.hyp, item.count, item.category)
+                for item in condition_substitutions
+            )
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -321,8 +360,10 @@ def main(argv: list[str] | None = None) -> None:
     language = None if args.language == "auto" else "bn"
     asr = WhisperAsr(args.model, device=args.device, compute_type=args.compute_type)
     results = transcribe_all(asr, rows, args.data_dir, conditions, language)
-    print_summary(args, len(rows), len(lexicon), score(results, lexicon))
+    substitutions = substitutions_by_condition(results, lexicon)
+    print_summary(args, len(rows), len(lexicon), score(results, lexicon), substitutions)
     write_utterances(output, utterance_scores(results, lexicon))
+    write_substitutions(substitutions_path(output), substitutions)
 
 
 if __name__ == "__main__":

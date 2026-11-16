@@ -289,6 +289,26 @@ cd ~/kotha && uv run python eval/wer.py --manifest data/testsets/asr_test.csv \
   `--manifest` (or a merged copy kept outside the repository), and `EVALUATION.md` states how
   many rows are private (ADR 0002).
 
+### Top substitutions
+
+Next to `--output`, the script writes `<output stem>.substitutions.csv` (columns `condition`,
+`ref`, `hyp`, `count`, `category`): the 20 most frequent substituted word pairs per condition,
+taken from the normalised text before the loanword lexicon is applied. After the table it
+prints only how many of those pairs fall in each category, for example
+`16k substitutions: loanword-script 7, script 3, number 1, other 9`; it never prints words.
+Each pair gets the first category that matches:
+
+- `loanword-script`: the reference has a Latin word from the lexicon and the hypothesis one of
+  its listed Bengali spellings. These are the errors `lexicon_wer` already forgives, so a high
+  count here is about spelling convention, not recognition.
+- `number`: either word contains a digit, for example `30` against `তিরিশ`.
+- `script`: one word is in Latin and the other in Bengali script, but the pair isn't in the
+  lexicon.
+- `other`: everything else, mostly real recognition errors.
+
+The file holds words from the transcripts, so like `--output` it stays outside the repository
+and follows the retention rules of ADR 0002.
+
 ### Loanword lexicon and `lexicon_wer`
 
 The references write English loanwords in Latin script ("mobile balance"), while the Bangla

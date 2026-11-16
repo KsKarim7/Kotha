@@ -635,3 +635,76 @@ def test_main_uses_the_committed_lexicon_by_default(
     assert (
         f"lexicon: {LEXICON_PATH} ({spellings} spellings)" in capsys.readouterr().out.splitlines()
     )
+
+
+def test_main_writes_the_top_substitutions_next_to_the_output(
+    cli: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr("wer.simulate_telephony", lambda audio_16k: audio_16k)
+    install_clock(monkeypatch, [1.0, 2.0, 3.0, 1.0, 2.0, 3.0])
+    run_cli(cli, "--split", "all", "--condition", "16k", "8k")
+    output = capsys.readouterr().out
+    substitutions = cli.output.with_name("utterances.substitutions.csv")
+    with substitutions.open(newline="", encoding="utf-8") as csv_file:
+        rows = list(csv.reader(csv_file))
+    assert rows == [
+        ["condition", "ref", "hyp", "count", "category"],
+        ["16k", "30gb", "gb", "1", "number"],
+        ["16k", "নম্বর", "নাম্বার", "1", "other"],
+        ["8k", "30gb", "gb", "1", "number"],
+        ["8k", "নম্বর", "নাম্বার", "1", "other"],
+    ]
+    lines = output.splitlines()
+    table_end = lines.index("", lines.index(TABLE_HEADER))
+    assert lines[table_end + 1 : table_end + 4] == [
+        "16k substitutions: loanword-script 0, script 0, number 1, other 1",
+        "8k substitutions: loanword-script 0, script 0, number 1, other 1",
+        "",
+    ]
+    assert output.splitlines()[-2:] == CLOSING_LINES
+    for word in ("30gb", "gb", "নম্বর", "নাম্বার", "আমার", "প্যাকেজ", "activate", "check"):
+        assert word not in output
+
+
+def test_main_counts_loanword_script_substitutions(
+    cli: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setitem(HYPOTHESES, 6_400, "আমার মোবাইল ব্যালেন্স কত")
+    sf.write(cli.data_dir / "k8.wav", np.zeros(6_400, dtype=np.float32), SAMPLE_RATE_HZ)
+    write_manifest(
+        cli.manifest,
+        HEADER,
+        [["k8", "k8.wav", "s01", "mix", "clean", "dev", "আমার mobile balance কত"]],
+    )
+    install_clock(monkeypatch, [1.0])
+    run_cli(cli)
+    output = capsys.readouterr().out
+    assert "16k substitutions: loanword-script 2, script 0, number 0, other 0" in output
+    with cli.output.with_name("utterances.substitutions.csv").open(encoding="utf-8") as csv_file:
+        assert list(csv.reader(csv_file))[1:] == [
+            ["16k", "balance", "ব্যালেন্স", "1", "loanword-script"],
+            ["16k", "mobile", "মোবাইল", "1", "loanword-script"],
+        ]
+    assert "মোবাইল" not in output and "mobile" not in output
+
+
+def test_output_inside_the_repository_writes_no_substitutions(
+    cli: SimpleNamespace, capsys: pytest.CaptureFixture[str]
+) -> None:
+    cli.output = REPO_ROOT / "eval" / "out.csv"
+    with pytest.raises(SystemExit):
+        run_cli(cli)
+    assert "must be written outside it" in capsys.readouterr().err
+    assert FakeAsr.instances == []
+    assert not (REPO_ROOT / "eval" / "out.substitutions.csv").exists()
+
+
+def test_a_run_without_output_stops_in_argparse_before_transcribing(
+    cli: SimpleNamespace, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as stopped:
+        main(["--manifest", str(cli.manifest), "--data-dir", str(cli.data_dir)])
+    assert stopped.value.code == 2
+    assert "the following arguments are required: --output" in capsys.readouterr().err
+    assert FakeAsr.instances == []
+    assert not cli.output.parent.exists()
