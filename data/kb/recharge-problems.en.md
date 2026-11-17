@@ -74,6 +74,8 @@ Call the helpline on `747` from a Nodi Telecom number, which is free, or on `017
 other phone. You can also open "Help" in the Nodi Telecom app. Have your number ready, together with
 the time of the recharge, the method you used, and the transaction ID, receipt or voucher number.
 
-Customer care will never ask for your PIN, your wallet PIN or any password. If someone who says they
-are from Nodi Telecom asks for one, end the call and contact the helpline yourself. All codes and
-numbers are listed under "How to reach us" in the document on checking your balance.
+Nodi Telecom never asks for your wallet PIN, any password or a one-time code, and never asks for your
+account PIN by SMS, email or a link. Your account PIN is asked for only when you call the helpline
+yourself; see the document on account PIN and verification. If anyone else asks for it, end the
+conversation and call the helpline yourself. All codes and numbers are listed under "How to reach
+us" in the document on checking your balance.
