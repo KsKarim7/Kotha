@@ -1,9 +1,12 @@
+import math
+import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
 from kotha.kb.documents import KbDocument
 
 MAX_WORDS = 300
+BLANK_LINE = re.compile(r"\n[ \t]*\n")
 
 
 @dataclass(frozen=True)
@@ -18,33 +21,46 @@ class Chunk:
 
 
 def word_count(text: str) -> int:
-    return len(text.split())
+    return sum(1 for token in text.split() if any(char.isalnum() for char in token))
 
 
 def split_sections(body: str, title: str) -> list[tuple[str, str]]:
+    lines = body.splitlines()
+    if lines and lines[0].startswith("# "):
+        lines = lines[1:]
     sections: list[tuple[str, list[str]]] = [(title, [])]
-    for line in body.splitlines():
-        if line.startswith("## "):
-            sections.append((line[3:].strip(), []))
-        elif not line.startswith("# "):
+    for line in lines:
+        if line.startswith("## ") or line == "##":
+            sections.append((line[2:].strip() or title, []))
+        else:
             sections[-1][1].append(line)
     return [
-        (heading, "\n".join(lines).strip()) for heading, lines in sections if "".join(lines).strip()
+        (heading, "\n".join(section_lines).strip())
+        for heading, section_lines in sections
+        if "".join(section_lines).strip()
     ]
 
 
 def split_blocks(text: str) -> list[str]:
-    return [block.strip() for block in text.split("\n\n") if block.strip()]
+    return [block.strip() for block in BLANK_LINE.split(text) if block.strip()]
 
 
-def pack_blocks(blocks: Sequence[str], max_words: int = MAX_WORDS) -> list[str]:
+def pack_blocks(blocks: Sequence[str]) -> list[str]:
+    counts = [word_count(block) for block in blocks]
+    remaining = sum(counts)
     pieces: list[list[str]] = []
-    for block in blocks:
-        current = pieces[-1] if pieces else None
-        if current and word_count("\n\n".join([*current, block])) <= max_words:
-            current.append(block)
-        else:
-            pieces.append([block])
+    words = 0
+    target = 0.0
+    for block, count in zip(blocks, counts, strict=True):
+        too_long = words + count > MAX_WORDS
+        overshoots = abs(words + count - target) > abs(words - target)
+        if not pieces or too_long or overshoots:
+            target = remaining / max(1, math.ceil(remaining / MAX_WORDS))
+            pieces.append([])
+            words = 0
+        pieces[-1].append(block)
+        words += count
+        remaining -= count
     return ["\n\n".join(piece) for piece in pieces]
 
 
