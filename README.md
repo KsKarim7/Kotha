@@ -46,6 +46,9 @@ uv run pytest -q
 uv run ruff check . && uv run ruff format --check .
 ```
 
+The database tests are skipped unless `DATABASE_URL` is set; `docs/runbook.md` ("Local database")
+shows how to start PostgreSQL with Docker and run them.
+
 ## Results
 
 There are no results yet. Every number will come from a committed evaluation run and will be reported in [EVALUATION.md](EVALUATION.md).
