@@ -104,6 +104,43 @@ cd ~/kotha && uv run python eval/gpu_bench.py --model models/bn-arif11-v7-small-
   restarts. The reference run with the settings above is
   `2026-11-13-nvidia-max-{burst,B-whole,A-whole}.tsv`.
 
+## Local database
+
+The knowledge base lives in PostgreSQL 16 with pgvector, from the pinned image
+`pgvector/pgvector:0.8.7-pg16` (ADR 0006). Docker Desktop must be running with WSL integration on.
+
+One-time setup: copy `.env.example` to `.env` and replace the placeholders. `.env` is git-ignored;
+never commit it. Make the password with `openssl rand -hex 24`: characters such as `/`, `@`, `%`,
+`$` or spaces break `DATABASE_URL` or the shell. `POSTGRES_PASSWORD` must match the password inside
+`DATABASE_URL`. The credentials take effect only when the volume is first created; after changing
+them, delete the volume (`docker compose down -v`) or change the role's password in the database.
+
+```bash
+cd ~/kotha && cp -n .env.example .env   # then edit .env
+docker compose up -d db
+docker compose ps db                     # wait until it says "healthy"
+```
+
+- The port is bound to `127.0.0.1` only, so the database is not reachable from the network.
+- Compose passes only `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB` from `.env` into the
+  container (not the other keys); without `POSTGRES_PASSWORD` the image refuses to start.
+- Data is kept in the named volume `kotha_pgdata` (Compose adds the project name);
+  `docker compose down -v` deletes it.
+- `kotha.db.schema.prepare_database` creates the `vector` extension and the `kb_chunks` table if
+  they are missing, inside the caller's transaction: the caller commits. Creating the extension
+  needs a superuser role, which the local and CI databases use. Search is exact cosine search with
+  no index while the KB is small (ADR 0006).
+
+Database tests read `DATABASE_URL` and are skipped when it is not set, so `uv run pytest -q` works
+without Docker. To run them against the local database (each test rolls back its changes):
+
+```bash
+cd ~/kotha && set -a && . ./.env && set +a && uv run pytest -q tests/test_db.py
+```
+
+CI runs the same tests against a service container of the same image. There `CI` is set, so a
+missing `DATABASE_URL` makes the tests fail instead of being skipped.
+
 ## Bangla Whisper models
 
 Two Bangla fine-tunes of Whisper, converted to CTranslate2 so that faster-whisper can load
