@@ -23,7 +23,7 @@ spelling or formatting differences.
 - A Bangla word is written in Bangla script.
 - An English word is written in Latin script exactly as spoken, even when Bangla speakers use it
   every day: `আমার mobile balance কত`, not `আমার মোবাইল ব্যালেন্স কত`.
-- Every English word in `data/testsets/loanwords.csv` (the `latin` column) is always written in
+- Every English word in `data/lexicon/loanwords.csv` (the `latin` column) is always written in
   Latin. If you meet a new English word, write it in Latin and add a row to that file with its
   usual Bangla spelling(s), so the loanword-agnostic score (`lexicon_wer`) can map it.
 - Do not add ordinary Bangla words that also stand for an English one (for example নম্বর for

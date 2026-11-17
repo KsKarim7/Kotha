@@ -155,16 +155,18 @@ scripts):
 `models/` is git-ignored, and the `check-added-large-files` pre-commit hook (500 KB) would
 block model files anyway.
 
-The conversion uses transformers 5.9.0, the version CTranslate2 4.9.0's own tests pin. It
-runs in a throwaway environment (`uv run --with`), so `pyproject.toml` and `uv.lock` don't
-change.
+The conversion uses the project's own transformers, a runtime dependency since
+sentence-transformers was added (ADR 0006). The models were first converted with transformers
+5.9.0, the version CTranslate2 4.9.0's own tests pin. On 2026-11-18 both conversions were repeated
+with the project's transformers 5.23.0, and every output file was byte-identical. Don't use
+`uv run --with` for these steps: an overlay can replace the project's CPU-only torch.
 
 Download each source at its pinned SHA first. `ct2-transformers-converter --revision` pins
 the weights but not the files that `--copy_files` fetches, which come from `main`.
 `training_args.bin` and the training logs are not downloaded.
 
 ```bash
-cd ~/kotha && uv run --with transformers==5.9.0 python - <<'PY'
+cd ~/kotha && uv run python - <<'PY'
 from huggingface_hub import snapshot_download
 
 files = [
@@ -192,11 +194,11 @@ PY
 `vocab.json` and `merges.txt`, and copy only that file into the source directory:
 
 ```bash
-uv run --with transformers==5.9.0 python -c 'from transformers import WhisperTokenizerFast; WhisperTokenizerFast.from_pretrained("models/src/bn-arif11-v7-small").save_pretrained("models/src/bn-arif11-v7-small-tokenizer")'
+uv run python -c 'from transformers import WhisperTokenizerFast; WhisperTokenizerFast.from_pretrained("models/src/bn-arif11-v7-small").save_pretrained("models/src/bn-arif11-v7-small-tokenizer")'
 cp models/src/bn-arif11-v7-small-tokenizer/tokenizer.json models/src/bn-arif11-v7-small/
 ```
 
-Its weights are a pickle (`pytorch_model.bin`). transformers 5.9.0 loads them with
+Its weights are a pickle (`pytorch_model.bin`). transformers loads them with
 `torch.load(..., weights_only=True)`, which refuses arbitrary Python objects; never turn that
 off.
 
@@ -204,11 +206,37 @@ Convert both:
 
 ```bash
 for name in bn-tugstugi-medium bn-arif11-v7-small; do
-  uv run --with transformers==5.9.0 ct2-transformers-converter --model "models/src/$name" \
+  uv run ct2-transformers-converter --model "models/src/$name" \
     --output_dir "models/$name-ct2" --copy_files tokenizer.json preprocessor_config.json \
     --quantization float16
 done
 ```
+
+## Embedding model and knowledge-base ingestion
+
+Retrieval embeds text with `BAAI/bge-m3` (MIT) through sentence-transformers, pinned at revision
+`5617a9f61b028005a4858fdac845db406aefb181` (ADR 0006). `kotha.rag.embedder.Embedder` loads it
+only from the local Hugging Face cache (`local_files_only=True`), on the CPU by default, and sets
+`DISABLE_SAFETENSORS_CONVERSION=true` first, so it never contacts the Hub and never downloads
+weights from a bot pull request. Download it once (about 2.2 GB, only the files the model needs):
+
+```bash
+cd ~/kotha && uv run python -c 'from huggingface_hub import snapshot_download; snapshot_download("BAAI/bge-m3", revision="5617a9f61b028005a4858fdac845db406aefb181", allow_patterns=["modules.json", "config_sentence_transformers.json", "sentence_bert_config.json", "1_Pooling/config.json", "config.json", "pytorch_model.bin", "tokenizer.json", "tokenizer_config.json", "special_tokens_map.json", "sentencepiece.bpe.model"])'
+```
+
+Then chunk, embed and store the knowledge base in the local database (see "Local database"):
+
+```bash
+cd ~/kotha && set -a && . ./.env && set +a && uv run python -m kotha.kb.ingest
+```
+
+- It reads `data/kb/` (`--kb-dir` to change it), chunks every document (`kotha.kb.chunks`),
+  embeds "title, heading, text" for each chunk, upserts the chunks into `kb_chunks` and deletes
+  chunks that are no longer in the KB, all in one transaction. Running it again gives the same
+  table, so it is safe to rerun after editing the KB.
+- It prints how many chunks were stored and removed. On the CPU it takes a few minutes and about
+  3 GB of RAM.
+- The test that loads the real model is skipped when the model is not in the cache, as in CI.
 
 ## Checking a manifest
 
@@ -269,7 +297,7 @@ Problems are printed as `<manifest>:<line> <id>: <problem>`. Errors:
 - `lang bn contains Latin letters`, `lang en contains Bengali letters`, `lang mix needs both
   Bengali and Latin letters` (rule 7; digits don't count).
 - `word N: loanword in Bengali script, write it as '<latin>' (rule 2)`: the word is a
-  spelling in the loanword lexicon (`--lexicon`, default `data/testsets/loanwords.csv`).
+  spelling in the loanword lexicon (`--lexicon`, default `data/lexicon/loanwords.csv`).
 
 Warnings, which don't change the exit code:
 
@@ -397,7 +425,7 @@ word as an error, even when the model heard it right.
 - For the secondary score, both the reference and the hypothesis are normalised as usual, and
   then every whole word listed in the lexicon is replaced by its Latin form. With an empty
   lexicon the two scores are equal. `lexicon_cer` counts the code points of the mapped text.
-- The lexicon is `data/testsets/loanwords.csv` (columns `latin,bangla`, one row per accepted
+- The lexicon is `data/lexicon/loanwords.csv` (columns `latin,bangla`, one row per accepted
   Bengali spelling), passed with `--lexicon` (default: that file). It is part of the
   transcription guideline (K2), which owns it; the text normaliser itself never
   transliterates.
