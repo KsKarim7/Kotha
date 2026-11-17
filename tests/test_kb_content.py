@@ -18,6 +18,7 @@ USSD_CODES = frozenset({"*747#", "*747*1#", "*747*2#", "*747*3#", "*747*4#"}) | 
 }
 SHORT_NUMBERS = frozenset({"747", "7470"})
 EXAMPLE_NUMBERS = frozenset(f"0170000000{digit}" for digit in range(10))
+EXAMPLE_TICKETS = frozenset(f"TKT-00000{digit}" for digit in range(1, 10))
 BLOCKED_LATIN = (
     "grameenphone robi airtel banglalink teletalk citycell skitto mygp mybl bkash nagad upay"
 ).split()
@@ -106,6 +107,14 @@ def unknown_short_codes(folder: Path) -> list[str]:
     return ussd + file_problems(folder, re.compile(r"`(\d{3,5})`"), SHORT_NUMBERS)
 
 
+def unknown_ticket_numbers(folder: Path) -> list[str]:
+    return [
+        problem
+        for problem in file_problems(folder, re.compile(r"TKT-[0-9০-৯]+"), frozenset())
+        if problem.split(": ")[1].translate(TO_ASCII_DIGITS) not in EXAMPLE_TICKETS
+    ]
+
+
 def bad_phone_numbers(folder: Path) -> list[str]:
     phone = re.compile(r"(?<![0-9০-৯])[0০][1১][0-9০-৯]{9}(?![0-9০-৯])")
     return [
@@ -124,6 +133,7 @@ CHECKS: list[Callable[[Path], list[str]]] = [
     brand_mentions,
     unknown_package_codes,
     unknown_short_codes,
+    unknown_ticket_numbers,
     bad_phone_numbers,
 ]
 
@@ -160,6 +170,7 @@ def remove_bn_file(folder: Path) -> None:
         (brand_mentions, append("validity.en.md", "\nLike Grameenphone does.\n")),
         (unknown_package_codes, append("validity.en.md", "\nBuy NT-2GB.\n")),
         (unknown_short_codes, append("validity.en.md", "\nDial `*747*9#`.\n")),
+        (unknown_ticket_numbers, append("validity.en.md", "\nYour ticket is TKT-123456.\n")),
         (bad_phone_numbers, append("validity.en.md", "\nCall 01711111111.\n")),
     ],
 )
