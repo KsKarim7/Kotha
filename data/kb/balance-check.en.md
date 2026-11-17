@@ -87,5 +87,7 @@ These are all the codes and numbers Nodi Telecom uses. Every other document uses
 | Helpline from any other phone | Call `01700000009` |
 
 The Nodi Telecom app has the same functions, and its "Help" section lets you write to customer care.
-SMS to `7470` and calls to `747` are free. Nodi Telecom staff will never ask for your PIN, your wallet
-PIN or any password; if someone does, end the conversation and call the helpline yourself.
+SMS to `7470` and calls to `747` are free. Nodi Telecom never asks for your wallet PIN, any password
+or a one-time code, and never asks for your account PIN by SMS, email or a link. Your account PIN is
+asked for only when you call the helpline yourself; see the document on account PIN and
+verification. If anyone else asks for it, end the conversation and call the helpline yourself.
