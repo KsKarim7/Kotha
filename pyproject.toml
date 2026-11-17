@@ -17,11 +17,14 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "alembic>=1.20.1",
     "jiwer>=4.0.0",
     "matplotlib>=3.11.2",
+    "mlflow-skinny>=3.18.0",
     "pre-commit>=4.7.0",
     "pytest>=9.2.0",
     "ruff>=0.17.3",
+    "sqlalchemy>=2.1.9",
 ]
 gpu = [
     "nvidia-cublas-cu12>=12.9.3.13 ; sys_platform == 'linux'",

@@ -1,4 +1,8 @@
 import csv
+import getpass
+import os
+import re
+import subprocess
 import unicodedata
 from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
@@ -11,6 +15,7 @@ import soundfile as sf
 from kotha.asr.whisper import DECODING_OPTIONS, Transcript
 from kotha.audio.convert import SAMPLE_RATE_HZ
 from kotha.text.normalize import normalize
+from tracking import open_store
 from wer import (
     LEXICON_PATH,
     REPO_ROOT,
@@ -708,3 +713,129 @@ def test_a_run_without_output_stops_in_argparse_before_transcribing(
     assert "the following arguments are required: --output" in capsys.readouterr().err
     assert FakeAsr.instances == []
     assert not cli.output.parent.exists()
+
+
+@pytest.fixture
+def mlflow_switches(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in ("MLFLOW_DISABLE_TELEMETRY", "MLFLOW_LOGGING_LEVEL"):
+        monkeypatch.delenv(name, raising=False)
+
+
+def mlflow_files(root: Path) -> list[Path]:
+    found = []
+    for folder, subfolders, files in os.walk(root):
+        subfolders[:] = [name for name in subfolders if name not in {".git", ".venv"}]
+        found += [Path(folder) / name for name in [*subfolders, *files]]
+    return [path for path in found if path.name in {"mlflow.db", "mlruns"}]
+
+
+def test_main_logs_one_mlflow_run_and_prints_only_its_id(
+    cli: SimpleNamespace,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    mlflow_switches: None,
+) -> None:
+    install_clock(monkeypatch, [1.0, 3.0])
+    run_cli(cli)
+    plain_lines = capsys.readouterr().out.splitlines()
+    store = tmp_path / "runs" / "mlflow"
+    install_clock(monkeypatch, [1.0, 3.0])
+    run_cli(cli, "--mlflow-dir", str(store))
+    tracked_lines = capsys.readouterr().out.splitlines()
+
+    assert tracked_lines[:-1] == plain_lines
+    run_line = re.fullmatch(r"mlflow run: ([0-9a-f]{32})", tracked_lines[-1])
+    assert run_line
+    client = open_store(store)
+    [run] = client.search_runs([client.get_experiment_by_name("kotha-asr").experiment_id])
+    assert run.info.run_id == run_line.group(1)
+    assert run.data.params == {
+        "model": "small",
+        "device": "cpu",
+        "compute_type": "int8",
+        "language": "bn",
+        "split": "dev",
+        "conditions": "16k",
+        "beam_size": "1",
+        **{key: str(value) for key, value in DECODING_OPTIONS.items()},
+        "normaliser": "kotha.text.normalize.normalize",
+        "lexicon": "loanwords.csv",
+        "lexicon_spellings": "2",
+        "manifest": "manifest.csv",
+        "manifest_rows": "2",
+    }
+    assert set(run.data.metrics) == {
+        f"16k.{lang}.{name}"
+        for lang in ("bn", "mix", "all")
+        for name in ("wer", "cer", "lexicon_wer", "lexicon_cer", "latency_p50_s", "latency_p95_s")
+    }
+    assert run.data.metrics["16k.all.latency_p50_s"] == 2.0
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, capture_output=True, text=True, check=True
+    )
+    assert run.data.tags["git_commit"] == head.stdout.strip()
+    assert run.data.tags["git_dirty"] in {"true", "false"}
+    assert sorted(item.path for item in client.list_artifacts(run.info.run_id)) == [
+        "utterances.csv",
+        "utterances.substitutions.csv",
+    ]
+    private = [str(tmp_path), str(Path.home()), getpass.getuser()]
+    logged = [*run.data.params.values(), *run.data.tags.values(), run.info.run_name]
+    assert not [value for value in logged for text in private if text in value]
+
+
+def test_mlflow_dir_inside_the_repository_is_refused(
+    cli: SimpleNamespace, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit):
+        run_cli(cli, "--mlflow-dir", str(REPO_ROOT / "mlruns"))
+    assert "--mlflow-dir" in capsys.readouterr().err
+    assert FakeAsr.instances == []
+    assert not (REPO_ROOT / "mlruns").exists()
+
+
+def test_a_git_failure_stops_the_run_before_any_asr_is_built(
+    cli: SimpleNamespace,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    not_a_repo = tmp_path / "not-a-repo"
+    not_a_repo.mkdir()
+    monkeypatch.setattr("wer.REPO_ROOT", not_a_repo)
+    with pytest.raises(SystemExit):
+        run_cli(cli, "--mlflow-dir", str(tmp_path / "runs"))
+    assert "--mlflow-dir needs the git state" in capsys.readouterr().err
+    assert FakeAsr.instances == []
+    assert not (tmp_path / "runs").exists()
+
+
+def test_an_experiment_with_another_location_is_refused_before_any_asr_is_built(
+    cli: SimpleNamespace,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    mlflow_switches: None,
+) -> None:
+    store = tmp_path / "runs"
+    open_store(store).create_experiment(
+        "kotha-asr", artifact_location=(tmp_path / "elsewhere").as_uri()
+    )
+    with pytest.raises(SystemExit) as stopped:
+        run_cli(cli, "--mlflow-dir", str(store))
+    error = capsys.readouterr().err
+    assert stopped.value.code == 2
+    assert "use the --mlflow-dir it was created with" in error
+    assert "Traceback" not in error
+    assert FakeAsr.instances == []
+    assert not cli.output.exists()
+
+
+def test_without_mlflow_dir_no_store_is_created(
+    cli: SimpleNamespace, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    install_clock(monkeypatch, [1.0, 3.0])
+    run_cli(cli)
+    assert cli.output.exists()
+    assert mlflow_files(tmp_path) == []
+    assert mlflow_files(REPO_ROOT) == []
