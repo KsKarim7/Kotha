@@ -5,6 +5,8 @@ requires-python = ">=3.11,<3.12"
 dependencies = [
     "faster-whisper>=1.2.1",
     "numpy>=2.4.6",
+    "pgvector>=0.5.1",
+    "psycopg[binary]>=3.3.9",
     "scipy>=1.17.1",
     "silero-vad>=6.2.3",
     "soundfile>=0.14.0",
