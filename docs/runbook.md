@@ -295,7 +295,8 @@ Next to `--output`, the script writes `<output stem>.substitutions.csv` (columns
 `ref`, `hyp`, `count`, `category`): the 20 most frequent substituted word pairs per condition,
 taken from the normalised text before the loanword lexicon is applied. After the table it
 prints only how many of those pairs fall in each category, for example
-`16k substitutions: loanword-script 7, script 3, number 1, other 9`; it never prints words.
+`16k substitutions: loanword-script <n>, script <n>, number <n>, other <n>`; it never prints
+words.
 Each pair gets the first category that matches:
 
 - `loanword-script`: the reference has a Latin word from the lexicon and the hypothesis one of
@@ -308,6 +309,45 @@ Each pair gets the first category that matches:
 
 The file holds words from the transcripts, so like `--output` it stays outside the repository
 and follows the retention rules of ADR 0002.
+
+### Tracking runs with MLflow
+
+With `--mlflow-dir DIR`, the script also logs the run to a local MLflow store: a SQLite file
+`DIR/mlflow.db` and artifacts under `DIR/artifacts`, in the experiment `kotha-asr`. It logs
+the run settings as params, every WER, CER, lexicon score and latency per condition and
+language as metrics (named like `16k.mix.wer`), the git commit and `git_dirty` as tags, and
+both CSVs as artifacts, then prints `mlflow run: <run id>`. The model, lexicon and manifest are
+logged by name only, never as full paths. The script switches MLflow's usage telemetry off and
+keeps its logs at WARNING unless `MLFLOW_LOGGING_LEVEL` is already set.
+
+```bash
+cd ~/kotha && uv run python eval/wer.py --manifest data/testsets/asr_test.csv \
+  --data-dir /mnt/g/Kotha/data/testsets/asr --model models/bn-tugstugi-medium-ct2 \
+  --device cuda --compute-type int8_float16 --condition 16k 8k --split dev \
+  --output /mnt/g/Kotha/data/eval/dev-tugstugi-medium-cuda.csv \
+  --mlflow-dir ~/kotha-runs/mlflow
+```
+
+- Keep the store in the WSL home, for example `~/kotha-runs/mlflow`, not on `/mnt/g`: SQLite's
+  file locking on Windows drives under WSL is unreliable. This is a precaution, not something
+  measured here. The script refuses a `--mlflow-dir` inside the repository.
+- The git state is read before transcription starts, so the tags describe the code that ran,
+  and a git failure stops the run early. Untracked files in the repository also make
+  `git_dirty` true.
+- A number counts for `EVALUATION.md` only if its run has `git_dirty` false.
+- The artifacts contain transcripts, so the store follows the retention rules of ADR 0002 like
+  the CSVs themselves.
+
+To browse the runs, start the UI on this machine only. The first start takes a while, because
+uv downloads full MLflow into a temporary environment; `pyproject.toml` stays unchanged:
+
+```bash
+cd ~/kotha && MLFLOW_DISABLE_TELEMETRY=true uv run --with mlflow mlflow ui \
+  --backend-store-uri sqlite:///$HOME/kotha-runs/mlflow/mlflow.db --host 127.0.0.1
+```
+
+`--host 127.0.0.1` keeps the UI unreachable from the network, because the store holds
+transcripts.
 
 ### Loanword lexicon and `lexicon_wer`
 

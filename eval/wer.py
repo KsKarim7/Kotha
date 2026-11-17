@@ -1,6 +1,7 @@
 import argparse
 import csv
 import statistics
+import subprocess
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, fields
@@ -14,6 +15,7 @@ from kotha.asr.whisper import DECODING_OPTIONS, WhisperAsr
 from kotha.audio.convert import load_mono_16k
 from kotha.audio.telephony import simulate_telephony
 from kotha.text.normalize import normalize
+from tracking import git_tags, log_run, open_experiment
 
 SPLITS = ("dev", "test", "all")
 CONDITIONS = ("16k", "8k")
@@ -23,6 +25,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 LEXICON_PATH = REPO_ROOT / "data" / "testsets" / "loanwords.csv"
 LEXICON_COLUMNS = ("latin", "bangla")
 SUBSTITUTION_COLUMNS = ("condition", "ref", "hyp", "count", "category")
+METRIC_NAMES = ("wer", "cer", "lexicon_wer", "lexicon_cer", "latency_p50_s", "latency_p95_s")
 
 
 @dataclass(frozen=True)
@@ -236,6 +239,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--split", choices=SPLITS, default="dev")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--lexicon", type=Path, default=LEXICON_PATH)
+    parser.add_argument("--mlflow-dir", type=Path)
     return parser
 
 
@@ -343,6 +347,39 @@ def write_substitutions(path: Path, substitutions: Mapping[str, Sequence[Substit
             )
 
 
+def repo_relative_label(path: Path) -> str:
+    resolved = path.resolve()
+    if resolved.is_relative_to(REPO_ROOT):
+        return resolved.relative_to(REPO_ROOT).as_posix()
+    return resolved.name
+
+
+def run_params(args: argparse.Namespace, row_count: int, lexicon_size: int) -> dict[str, str]:
+    decoding = {"beam_size": BEAM_SIZE, **DECODING_OPTIONS}
+    return {
+        "model": Path(args.model).name,
+        "device": args.device,
+        "compute_type": args.compute_type,
+        "language": args.language,
+        "split": args.split,
+        "conditions": ",".join(dict.fromkeys(args.condition)),
+        **{key: str(value) for key, value in decoding.items()},
+        "normaliser": NORMALISER,
+        "lexicon": repo_relative_label(args.lexicon),
+        "lexicon_spellings": str(lexicon_size),
+        "manifest": args.manifest.name,
+        "manifest_rows": str(row_count),
+    }
+
+
+def group_metrics(scores: Sequence[GroupScore]) -> dict[str, float]:
+    return {
+        f"{group.condition}.{group.lang}.{name}": getattr(group, name)
+        for group in scores
+        for name in METRIC_NAMES
+    }
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -352,18 +389,44 @@ def main(argv: list[str] | None = None) -> None:
             f"--output {args.output} is inside the repository; the CSV holds transcripts of "
             "test audio and must be written outside it"
         )
+    if args.mlflow_dir and args.mlflow_dir.resolve().is_relative_to(REPO_ROOT):
+        parser.error(
+            f"--mlflow-dir {args.mlflow_dir} is inside the repository; the run's artifacts hold "
+            "transcripts of test audio and must be stored outside it"
+        )
     rows = select_split(read_manifest(args.manifest), args.split)
     if not rows:
         parser.error(f"no rows in split {args.split!r} of {args.manifest}")
+    tags: dict[str, str] = {}
+    if args.mlflow_dir:
+        try:
+            tags = git_tags(REPO_ROOT)
+        except (subprocess.CalledProcessError, OSError) as error:
+            parser.error(f"--mlflow-dir needs the git state of {REPO_ROOT}: {error}")
+        try:
+            client, experiment = open_experiment(args.mlflow_dir)
+        except (ValueError, OSError) as error:
+            parser.error(str(error))
     lexicon = read_lexicon(args.lexicon)
     conditions = list(dict.fromkeys(args.condition))
     language = None if args.language == "auto" else "bn"
     asr = WhisperAsr(args.model, device=args.device, compute_type=args.compute_type)
     results = transcribe_all(asr, rows, args.data_dir, conditions, language)
+    scores = score(results, lexicon)
     substitutions = substitutions_by_condition(results, lexicon)
-    print_summary(args, len(rows), len(lexicon), score(results, lexicon), substitutions)
+    print_summary(args, len(rows), len(lexicon), scores, substitutions)
     write_utterances(output, utterance_scores(results, lexicon))
     write_substitutions(substitutions_path(output), substitutions)
+    if args.mlflow_dir:
+        run_id = log_run(
+            client,
+            experiment,
+            run_params(args, len(rows), len(lexicon)),
+            group_metrics(scores),
+            tags,
+            [output, substitutions_path(output)],
+        )
+        print(f"mlflow run: {run_id}")
 
 
 if __name__ == "__main__":
