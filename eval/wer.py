@@ -10,10 +10,11 @@ from time import perf_counter
 
 import jiwer
 
-from error_analysis import BENGALI_BLOCK, Substitution, category_counts, top_substitutions
+from error_analysis import Substitution, category_counts, top_substitutions
 from kotha.asr.whisper import DECODING_OPTIONS, WhisperAsr
 from kotha.audio.convert import load_mono_16k
 from kotha.audio.telephony import simulate_telephony
+from kotha.text.lexicon import LEXICON_PATH, apply_lexicon, read_lexicon
 from kotha.text.normalize import normalize
 from tracking import git_tags, log_run, open_experiment
 
@@ -22,8 +23,6 @@ CONDITIONS = ("16k", "8k")
 BEAM_SIZE = 1
 NORMALISER = "kotha.text.normalize.normalize"
 REPO_ROOT = Path(__file__).resolve().parent.parent
-LEXICON_PATH = REPO_ROOT / "data" / "lexicon" / "loanwords.csv"
-LEXICON_COLUMNS = ("latin", "bangla")
 SUBSTITUTION_COLUMNS = ("condition", "ref", "hyp", "count", "category")
 METRIC_NAMES = ("wer", "cer", "lexicon_wer", "lexicon_cer", "latency_p50_s", "latency_p95_s")
 
@@ -95,43 +94,6 @@ def select_split(rows: Sequence[ManifestRow], split: str) -> list[ManifestRow]:
     if split == "all":
         return list(rows)
     return [row for row in rows if row.split == split]
-
-
-def read_lexicon(path: Path) -> dict[str, str]:
-    lexicon: dict[str, str] = {}
-    first_lines: dict[str, int] = {}
-    with path.open(newline="", encoding="utf-8-sig") as lexicon_file:
-        reader = csv.DictReader(lexicon_file)
-        missing = [column for column in LEXICON_COLUMNS if column not in (reader.fieldnames or [])]
-        if missing:
-            raise ValueError(f"lexicon {path} is missing columns: {', '.join(missing)}")
-        for line, row in enumerate(reader, start=2):
-            location = f"lexicon {path}, line {line}"
-            latin = lexicon_word(row["latin"], "latin", location)
-            bangla = lexicon_word(row["bangla"], "bangla", location)
-            if any(ord(char) in BENGALI_BLOCK for char in latin):
-                raise ValueError(
-                    f"{location}: latin must not contain Bengali letters, got {latin!r}"
-                )
-            if lexicon.get(bangla, latin) != latin:
-                raise ValueError(
-                    f"{location}: {bangla!r} maps to {latin!r} here and to {lexicon[bangla]!r}"
-                    f" on line {first_lines[bangla]}"
-                )
-            lexicon[bangla] = latin
-            first_lines.setdefault(bangla, line)
-    return lexicon
-
-
-def lexicon_word(value: str | None, column: str, location: str) -> str:
-    word = normalize(value or "")
-    if len(word.split()) != 1:
-        raise ValueError(f"{location}: {column} must be one word after normalising, got {word!r}")
-    return word
-
-
-def apply_lexicon(normalised_text: str, lexicon: Mapping[str, str]) -> str:
-    return " ".join(lexicon.get(token, token) for token in normalised_text.split())
 
 
 def normalised_pairs(results: Sequence[Result]) -> list[tuple[str, str]]:

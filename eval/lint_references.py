@@ -3,8 +3,9 @@ import unicodedata
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+from kotha.text.lexicon import BENGALI_BLOCK, LEXICON_PATH, read_lexicon
 from kotha.text.normalize import normalize
-from wer import BENGALI_BLOCK, LEXICON_PATH, ManifestRow, read_lexicon, read_manifest
+from wer import ManifestRow, read_manifest
 
 TAKA_SIGN = chr(0x09F3)
 BANGLA_DIGITS = frozenset(chr(code_point) for code_point in range(0x09E6, 0x09F0))
