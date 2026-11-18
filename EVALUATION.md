@@ -55,7 +55,7 @@ Typed questions by language, hit@3 / MRR (24 questions each):
 | Hybrid (RRF) | 0.875 / 0.759 | 0.917 / 0.814 | 1.000 / 0.924 |
 | Hybrid + lexicon expansion | 0.875 / 0.759 | 0.917 / 0.814 | 0.917 / 0.917 |
 
-Values are the run's metrics rounded to 3 decimals. Run: `eval/retrieval.py` (runbook, "Retrieval evaluation") on commit `75815fd`, `git_dirty` false, MLflow run `248a1bcae2ad4aef834b73797ffad89a` in the experiment `kotha-retrieval`; 72 typed questions (`rag_test.csv`, SHA-256 `82958d25…`), 126 chunks, bge-m3 at revision `5617a9f6` on CPU, 20 candidates per retriever, RRF k = 60. The ASR-transcribed column needs the recorded test set and the M3 ASR run.
+Values are the run's metrics rounded to 3 decimals. Run: `eval/retrieval.py` (runbook, "Retrieval evaluation") on commit `75815fd`, `git_dirty` false, MLflow run `248a1bcae2ad4aef834b73797ffad89a` in the experiment `kotha-retrieval`; 72 typed questions (`rag_test.csv`, SHA-256 `82958d25…`), 126 chunks, bge-m3 at revision `5617a9f6` on CPU (the script's default device), 20 candidates per retriever, RRF k = 60, lexicon `loanwords.csv` with 22 spellings. The ASR-transcribed column needs the recorded test set and the M3 ASR run.
 
 The typed questions were written by the knowledge base's author and will be reviewed by Khaled, which tends to raise the scores. Each question has one gold document, although the knowledge base repeats some facts across documents, so a chunk from another document that also answers the question counts as a miss.
 
