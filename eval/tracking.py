@@ -25,27 +25,31 @@ def open_store(mlflow_dir: Path) -> "MlflowClient":
     return MlflowClient(tracking_uri=f"sqlite:///{store / 'mlflow.db'}")
 
 
-def experiment_id(client: "MlflowClient", mlflow_dir: Path) -> str:
+def experiment_id(
+    client: "MlflowClient", mlflow_dir: Path, experiment_name: str = EXPERIMENT_NAME
+) -> str:
     artifact_location = (mlflow_dir.resolve() / "artifacts").as_uri()
-    experiment = client.get_experiment_by_name(EXPERIMENT_NAME)
+    experiment = client.get_experiment_by_name(experiment_name)
     if experiment is None:
-        return client.create_experiment(EXPERIMENT_NAME, artifact_location=artifact_location)
+        return client.create_experiment(experiment_name, artifact_location=artifact_location)
     if experiment.artifact_location != artifact_location:
         raise ValueError(
-            f"experiment {EXPERIMENT_NAME!r} stores artifacts at {experiment.artifact_location}, "
+            f"experiment {experiment_name!r} stores artifacts at {experiment.artifact_location}, "
             f"not {artifact_location}; use the --mlflow-dir it was created with"
         )
     return experiment.experiment_id
 
 
-def open_experiment(mlflow_dir: Path) -> tuple["MlflowClient", str]:
+def open_experiment(
+    mlflow_dir: Path, experiment_name: str = EXPERIMENT_NAME
+) -> tuple["MlflowClient", str]:
     quiet_mlflow()
     from mlflow.exceptions import MlflowException
     from sqlalchemy.exc import SQLAlchemyError
 
     try:
         client = open_store(mlflow_dir)
-        return client, experiment_id(client, mlflow_dir)
+        return client, experiment_id(client, mlflow_dir, experiment_name)
     except (MlflowException, SQLAlchemyError) as error:
         raise ValueError(f"cannot use the MLflow store in {mlflow_dir}: {error}") from error
 

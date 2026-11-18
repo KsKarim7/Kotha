@@ -14,7 +14,7 @@ Results for Milestone 1. Every result in this report comes from a committed eval
 | --- | --- | --- |
 | `asr_test` | Utterances with speaker, language (bn / en / mix), noise condition (clean / street / fan) and reference text | [measure] |
 | `intent_test` | Utterance text with an intent label | [measure] |
-| `rag_test` | Questions with the expected document id | [measure] |
+| `rag_test` | Typed questions with the expected document id, written by the knowledge base's author and awaiting Khaled's review | 72 questions: 24 bn, 24 en, 24 mix |
 | `calls` | Stereo role-play calls: caller on the left channel, agent on the right | [measure] |
 
 ## VAD hangover ablation
@@ -45,6 +45,8 @@ Interpretation: [to be written]
 | BM25 only | [measure] | [measure] |
 | Hybrid (RRF) | [measure] | [measure] |
 | Hybrid + lexicon expansion | [measure] | [measure] |
+
+The typed questions were written by the knowledge base's author and will be reviewed by Khaled, which tends to raise the scores. Each question has one gold document, although the knowledge base repeats some facts across documents, so a chunk from another document that also answers the question counts as a miss.
 
 Interpretation: [to be written]
 

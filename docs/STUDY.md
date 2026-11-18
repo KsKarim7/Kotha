@@ -141,3 +141,5 @@ Questions about code I haven't understood yet. Answer each one in my own words o
 | `services/api/kotha/text/lexicon.py` | `spelling_groups`, `expand_tokens` | Why does expansion apply to BM25 only and not to the dense query, and how does it connect Bangla-script loanwords with Latin text? | |
 | `services/api/kotha/rag/retriever.py` | `HybridRetriever.dense_ids` | Why does the in-memory BM25 index mean a chunk ingested after startup must be ignored until a restart, why does each query run inside `connection.transaction()`, and why does that block need `_query_lock` when threads share one connection? | |
 | `services/api/kotha/rag/retriever.py` | `search_tokens` | Why is Markdown markup removed here and not in `normalize`, which the WER metric also uses? | |
+| `eval/retrieval.py` | `first_relevant_rank`, `group_score` | What do hit@3 and MRR each reward, and why is a question judged by its gold document and not by one exact chunk? | |
+| `tests/test_retrieval_eval.py` | `test_no_question_copies_a_phrase_from_the_knowledge_base` | Why do questions that reuse the knowledge base's wording make retrieval scores look better than they are? | |
