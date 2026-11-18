@@ -4,7 +4,8 @@ from dataclasses import dataclass
 
 import jiwer
 
-BENGALI_BLOCK = range(0x0980, 0x0A00)
+from kotha.text.lexicon import BENGALI_BLOCK
+
 CATEGORIES = ("loanword-script", "script", "number", "other")
 
 

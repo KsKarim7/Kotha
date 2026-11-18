@@ -84,9 +84,11 @@ client is `psycopg[binary]` 3 with `pgvector`'s `register_vector`.
 - Inference runs off the event loop, on the CPU by default so the GPU stays with ASR.
 
 **Sparse retrieval.** BM25 in process, built from the stored chunks when the service starts.
-Tokens are `kotha.text.normalize.normalize(text).split()`. We write our own `BM25Okapi` in the
-code task, matching `rank_bm25`'s formula and defaults, with a hand-computed test; `rank_bm25`
-is not a dependency.
+Tokens are `kotha.text.normalize.normalize(text).split()`, after the Markdown characters `` ` ``,
+`|`, `<` and `>` are replaced by spaces, because the KB writes every code in backticks and
+`normalize` keeps these characters; `normalize` itself stays unchanged because WER uses it. We
+write our own `BM25Okapi` in the code task, matching `rank_bm25`'s formula and defaults, with a
+hand-computed test; `rank_bm25` is not a dependency.
 
 **Query expansion.** The loanword lexicon moves from `data/testsets/loanwords.csv` to
 `data/lexicon/loanwords.csv` in the code task, because the running service will read it and test
