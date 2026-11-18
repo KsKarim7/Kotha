@@ -266,6 +266,35 @@ cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
   Khaled reviews them. Change a question only to fix its wording or its gold document, never
   because of how it scored, and rerun the evaluation after any change.
 
+## Text chat and scenarios
+
+Both commands run the real answer pipeline (ADR 0008): hybrid retrieval over the database, bge-m3
+on CPU and Gemini. They need the database up and ingested, as for the retrieval evaluation, and
+`GEMINI_API_KEY` in `.env`. Everything typed goes to the Gemini free tier, so type only made-up
+test questions, never a real caller's words.
+
+```bash
+cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
+  && HF_HUB_OFFLINE=1 uv run python -m kotha.dialogue.chat
+```
+
+Type a question after `you>`; Ctrl-D ends the chat. Each reply shows its kind (`answer`,
+`account_unavailable`, `handoff: <reason>` or `repeat`) and the cited chunks.
+
+The scenario runner replays the scripted conversations in `data/scenarios/text_scenarios.json`
+and checks each reply's kind, language and, for answers, the cited document. In MS1 the pipeline
+keeps no state between turns, so every turn must make sense on its own. It prints every turn and
+exits with status 1 if any turn fails:
+
+```bash
+cd ~/kotha && set -a && . ./.env && set +a \
+  && HF_HUB_OFFLINE=1 uv run python -m kotha.dialogue.scenarios > ~/kotha-runs/scenarios.txt
+```
+
+- The output holds the bot's answers, so keep it outside the repository.
+- Gemini's answers vary between runs; a failing turn is worth reading before changing anything.
+  Change a scenario only when its expectation is wrong, never to make a run pass.
+
 ## Checking a manifest
 
 `eval/validate_manifest.py` checks one or more manifests and their audio before any
