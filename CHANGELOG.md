@@ -45,6 +45,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Knowledge-base ingestion: `kotha.rag.embedder.Embedder` loads `BAAI/bge-m3` at a pinned revision through sentence-transformers, offline and on the CPU by default, and `python -m kotha.kb.ingest` chunks, embeds and stores the KB in `kb_chunks` in one idempotent transaction; sentence-transformers joins the runtime dependencies.
 - Hybrid retrieval: `kotha.rag.retriever.HybridRetriever.search` combines pgvector cosine search with our own `kotha.rag.bm25.BM25Okapi` by reciprocal rank fusion (k = 60, top 20 of each, 4 returned), and the loanword lexicon expands BM25 queries from Latin to Bangla spellings and back.
 - A retrieval evaluation: `data/testsets/rag_test.csv` holds 72 typed questions (24 each in bn, en and mix) with their gold documents, and `eval/retrieval.py` reports hit@3 and MRR for dense, BM25, hybrid and hybrid with lexicon expansion, overall and per language, with optional MLflow logging; the runbook has a "Retrieval evaluation" section.
+- A citation verifier, `kotha.rag.citations.verify_answer`: every sentence except a question or a courtesy phrase must end with a `[chunk_id]` from the retrieved chunks; every number in the answer, in digits or Bangla and English number words, must appear in a cited chunk or a tool result, and a money amount must be one of the amounts the billing side passed in. `kotha.text.number_words` turns number words into digits.
 
 ### Changed
 

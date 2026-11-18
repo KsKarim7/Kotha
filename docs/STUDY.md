@@ -143,3 +143,7 @@ Questions about code I haven't understood yet. Answer each one in my own words o
 | `services/api/kotha/rag/retriever.py` | `search_tokens` | Why is Markdown markup removed here and not in `normalize`, which the WER metric also uses? | |
 | `eval/retrieval.py` | `first_relevant_rank`, `group_score` | What do hit@3 and MRR each reward, and why is a question judged by its gold document and not by one exact chunk? | |
 | `tests/test_retrieval_eval.py` | `test_no_question_copies_a_phrase_from_the_knowledge_base` | Why do questions that reuse the knowledge base's wording make retrieval scores look better than they are? | |
+| `services/api/kotha/rag/citations.py` | `verify_answer`, `money_numbers` | What does a number check catch that a citation check cannot, why may a money amount come only from `money_amounts`, and what can still get through (a real number attached to the wrong unit, a claim phrased as a question)? | |
+| `services/api/kotha/rag/citations.py` | `comparable_text`, `canonical_number` | Why must digits, number words and grouping commas be brought to one form before two numbers are compared? | |
+| `services/api/kotha/text/number_words.py` | `phrase_value` | How do multipliers such as শো, হাজার and thousand turn a run of number words into one value? | |
+| `services/api/kotha/rag/citations.py` | `split_sentences`, `SENTENCE_END` | Why are citations masked before splitting, and why is it safer here to split too often than too rarely? | |
