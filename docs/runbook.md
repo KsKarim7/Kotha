@@ -238,6 +238,34 @@ cd ~/kotha && set -a && . ./.env && set +a && uv run python -m kotha.kb.ingest
   3 GB of RAM.
 - The test that loads the real model is skipped when the model is not in the cache, as in CI.
 
+## Retrieval evaluation
+
+`eval/retrieval.py` asks every question in `data/testsets/rag_test.csv` and scores four
+retrievers: dense only, BM25 only, hybrid, and hybrid with lexicon expansion. A question counts
+as found at the rank of the first chunk from its gold document, within the top 20. The script
+prints hit@3 and MRR overall and per language, and writes one row per question and retriever to
+`--output`, which must be outside the repository.
+
+It needs Docker Desktop running, the knowledge base ingested and bge-m3 in the Hugging Face cache
+(see "Local database" and "Embedding model and knowledge-base ingestion"):
+
+```bash
+cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
+  && HF_HUB_OFFLINE=1 uv run python -m kotha.kb.ingest \
+  && HF_HUB_OFFLINE=1 uv run python eval/retrieval.py \
+    --output ~/kotha-runs/retrieval/typed.csv --mlflow-dir ~/kotha-runs/mlflow
+```
+
+- With `--mlflow-dir`, the run goes to the experiment `kotha-retrieval`, with metrics named like
+  `hybrid_lexicon.mix.hit_at_3`, and the script prints `mlflow run: <run id>`.
+- A number counts for `EVALUATION.md` only if the run has `git_dirty` false.
+- The script refuses to run when `kb_chunks` differs from `data/kb/`, and it logs the SHA-256 of
+  the test set, so a run can be tied to the exact questions and knowledge base. The check compares
+  chunk text, not vectors, so run the ingestion again after changing the embedding model.
+- The questions were written by the author of the knowledge base, which tends to raise the scores.
+  Khaled reviews them. Change a question only to fix its wording or its gold document, never
+  because of how it scored, and rerun the evaluation after any change.
+
 ## Checking a manifest
 
 `eval/validate_manifest.py` checks one or more manifests and their audio before any

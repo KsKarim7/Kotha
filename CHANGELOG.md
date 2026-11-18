@@ -44,6 +44,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A local PostgreSQL 16 + pgvector database for the knowledge base: `docker-compose.yml` with the pinned `pgvector/pgvector:0.8.7-pg16` image (credentials from `.env`, port bound to 127.0.0.1), `.env.example`, `kotha.db.schema` with the `kb_chunks` table (1024-dimensional embeddings, exact cosine search), the same image as a CI service container, and database tests that skip without `DATABASE_URL` outside CI (in CI a missing URL fails them); `psycopg[binary]` and `pgvector` join the runtime dependencies.
 - Knowledge-base ingestion: `kotha.rag.embedder.Embedder` loads `BAAI/bge-m3` at a pinned revision through sentence-transformers, offline and on the CPU by default, and `python -m kotha.kb.ingest` chunks, embeds and stores the KB in `kb_chunks` in one idempotent transaction; sentence-transformers joins the runtime dependencies.
 - Hybrid retrieval: `kotha.rag.retriever.HybridRetriever.search` combines pgvector cosine search with our own `kotha.rag.bm25.BM25Okapi` by reciprocal rank fusion (k = 60, top 20 of each, 4 returned), and the loanword lexicon expands BM25 queries from Latin to Bangla spellings and back.
+- A retrieval evaluation: `data/testsets/rag_test.csv` holds 72 typed questions (24 each in bn, en and mix) with their gold documents, and `eval/retrieval.py` reports hit@3 and MRR for dense, BM25, hybrid and hybrid with lexicon expansion, overall and per language, with optional MLflow logging; the runbook has a "Retrieval evaluation" section.
 
 ### Changed
 
