@@ -41,10 +41,21 @@ Interpretation: [to be written]
 
 | Retriever | Typed questions: hit@3 / MRR | ASR-transcribed questions: hit@3 / MRR |
 | --- | --- | --- |
-| Dense only | [measure] | [measure] |
-| BM25 only | [measure] | [measure] |
-| Hybrid (RRF) | [measure] | [measure] |
-| Hybrid + lexicon expansion | [measure] | [measure] |
+| Dense only | 0.958 / 0.893 | [measure] |
+| BM25 only | 0.694 / 0.663 | [measure] |
+| Hybrid (RRF) | 0.931 / 0.832 | [measure] |
+| Hybrid + lexicon expansion | 0.903 / 0.830 | [measure] |
+
+Typed questions by language, hit@3 / MRR (24 questions each):
+
+| Retriever | bn | en | mix |
+| --- | --- | --- | --- |
+| Dense only | 0.958 / 0.913 | 0.917 / 0.865 | 1.000 / 0.903 |
+| BM25 only | 0.625 / 0.571 | 0.625 / 0.644 | 0.833 / 0.774 |
+| Hybrid (RRF) | 0.875 / 0.759 | 0.917 / 0.814 | 1.000 / 0.924 |
+| Hybrid + lexicon expansion | 0.875 / 0.759 | 0.917 / 0.814 | 0.917 / 0.917 |
+
+Values are the run's metrics rounded to 3 decimals. Run: `eval/retrieval.py` (runbook, "Retrieval evaluation") on commit `75815fd`, `git_dirty` false, MLflow run `248a1bcae2ad4aef834b73797ffad89a` in the experiment `kotha-retrieval`; 72 typed questions (`rag_test.csv`, SHA-256 `82958d25…`), 126 chunks, bge-m3 at revision `5617a9f6` on CPU, 20 candidates per retriever, RRF k = 60. The ASR-transcribed column needs the recorded test set and the M3 ASR run.
 
 The typed questions were written by the knowledge base's author and will be reviewed by Khaled, which tends to raise the scores. Each question has one gold document, although the knowledge base repeats some facts across documents, so a chunk from another document that also answers the question counts as a miss.
 
