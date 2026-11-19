@@ -1,28 +1,23 @@
 import argparse
-import os
 import time
 import unicodedata
 from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
 
-import numpy as np
 import soundfile as sf
 
 from kotha.asr.whisper import WhisperAsr
+from kotha.dialogue.routing import Language
+from kotha.tts.mms import SEED, VOICES, MmsVoice
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-VOICES = {
-    "bn": ("facebook/mms-tts-ben", "0da99de6074c8829121cdabfbdba423af18e8e56"),
-    "en": ("facebook/mms-tts-eng", "c71de0fe7204c83f1c10820a7d696d0b450048ba"),
-}
-SEED = 0
 
 
 @dataclass(frozen=True)
 class ProbeSentence:
     id: str
-    lang: str
+    lang: Language
     text: str
 
 
@@ -62,29 +57,6 @@ def dropped_characters(text: str, vocab: Collection[str], blank: str) -> tuple[s
 
 def character_label(char: str) -> str:
     return f"U+{ord(char):04X} {unicodedata.name(char, '?')}"
-
-
-class MmsVoice:
-    def __init__(self, lang: str) -> None:
-        os.environ["DISABLE_SAFETENSORS_CONVERSION"] = "true"
-        from transformers import AutoTokenizer, VitsModel
-
-        model_id, revision = VOICES[lang]
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            model_id, revision=revision, local_files_only=True
-        )
-        self.model = VitsModel.from_pretrained(model_id, revision=revision, local_files_only=True)
-        self.model.eval()
-        self.sampling_rate: int = self.model.config.sampling_rate
-
-    def synthesize(self, text: str) -> np.ndarray:
-        import torch
-
-        inputs = self.tokenizer(text, return_tensors="pt")
-        torch.manual_seed(SEED)
-        with torch.inference_mode():
-            waveform = self.model(**inputs).waveform
-        return waveform[0].numpy().astype(np.float32)
 
 
 def probe(

@@ -135,3 +135,25 @@ Bangla, or `mobile` written in Bangla script) stays an error: later steps receiv
 as written, so transliterating it here would hide an error they still see.
 
 Any change to `normalize` changes every WER number, so all evaluations are rerun after one.
+
+## Text-to-speech
+
+Replies are spoken by two MMS VITS voices, `facebook/mms-tts-ben` and `facebook/mms-tts-eng`
+(ADR 0009). Their tokenizers silently drop every character outside their vocabularies, so the
+text a voice receives must contain only characters it knows.
+
+- **Speakable text** (`kotha.tts.speakable`). The dialogue keeps digits, because the citation
+  verifier checks them; only the TTS input turns them into words. `speakable_sentences` removes
+  citation markers, splits the reply into sentences, and writes each one as words: numbers in
+  Bangla or English words, short codes and phone numbers digit by digit, `*` and `#` as words,
+  Latin terms in Bangla script for the Bangla voice. The last step keeps only characters in the
+  voice's vocabulary.
+- **Voices** (`kotha.tts.mms.MmsVoice`). Each voice loads once, offline, at its pinned revision.
+  Every synthesis sets the torch seed to 0 under one process-wide lock, so the same text gives
+  the same audio.
+- **Service** (`kotha.tts.service.TtsService`). It routes a reply to the voice for its language
+  and returns one float32 array at 16 kHz per sentence, so later milestones can start playing
+  the first sentence early. `speak` runs synthesis in a worker thread (`asyncio.to_thread`), never
+  on the event loop. The greeting and the fixed replies (handoff, "please repeat", "not
+  available yet") are synthesised once at start and served from a read-only cache; answers are
+  not cached. `to_telephony_rate` resamples to 8 kHz for the phone path.

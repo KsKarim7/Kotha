@@ -157,3 +157,6 @@ Questions about code I haven't understood yet. Answer each one in my own words o
 | `eval/tts_probe.py` | `dropped_characters`, `MmsVoice.synthesize` | Why does a VITS voice need a fixed seed, what is the real-time factor, and why is a character the tokenizer silently drops worse than one it mispronounces? | |
 | `services/api/kotha/tts/speakable.py` | `num_to_bn_words`, `spoken_number` | How do Bangla numbers compose above 99 (শো, হাজার, লাখ, কোটি), and why is a three-digit number without a unit read digit by digit? | |
 | `services/api/kotha/tts/speakable.py` | `speakable`, `CODE`, `spoken_latin_word` | Why does the dialogue keep digits while the TTS input turns them into words, why is the order of the replacement steps important, and why does a test run the whole knowledge base through the voice vocabulary? | |
+| `services/api/kotha/tts/service.py` | `TtsService.speak`, `warm_fixed_prompts` | Why does synthesis run in a worker thread, why are only fixed prompts cached and made read-only, and why is audio returned per sentence? | |
+| `services/api/kotha/tts/mms.py` | `MmsVoice.synthesize`, `SYNTHESIS_LOCK` | Why must one lock cover every voice when the seed is global to torch? | |
+| `eval/listening_sheet.py` | `clip_plan`, `write_key` | Why is a listening test blind, and why are the before and after clips shuffled with a fixed seed? | |

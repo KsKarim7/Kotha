@@ -160,6 +160,10 @@ FIXED_REPLIES: dict[ReplyKind, dict[Language, str]] = {
         "en": "Sorry, I did not catch that. Could you say it again?",
     },
 }
+GREETING: dict[Language, str] = {
+    "bn": "নদী টেলিকমে স্বাগতম। আমি কথা, একটি স্বয়ংক্রিয় সহকারী। কীভাবে সাহায্য করতে পারি?",
+    "en": "Welcome to Nodi Telecom. I am Kotha, an automated assistant. How can I help you?",
+}
 
 
 class Retriever(Protocol):
