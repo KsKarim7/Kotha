@@ -62,6 +62,20 @@ def test_warm_up_runs_one_search_and_never_calls_the_llm() -> None:
     assert llm.calls == []
 
 
+def test_replies_carry_the_time_spent_in_retrieval_and_the_llm() -> None:
+    pipeline, llm, _ = pipeline_for(["no citation here", "still none"])
+    reply = pipeline.reply("How do I replace my SIM card?")
+    assert reply.handoff_reason == HandoffReason.REJECTED_TWICE
+    assert len(llm.calls) == 2
+    assert set(reply.stage_seconds) == {"retrieval", "llm"}
+    assert all(seconds >= 0 for seconds in reply.stage_seconds.values())
+
+
+def test_an_account_request_spends_no_time_in_retrieval_or_the_llm() -> None:
+    pipeline, _, _ = pipeline_for([])
+    assert pipeline.reply("What is my balance?").stage_seconds == {}
+
+
 def test_a_cited_answer_is_returned_without_markers_and_with_its_sources() -> None:
     pipeline, llm, _ = pipeline_for([f"{GOOD_EN}  "])
     reply = pipeline.reply("what do I bring to replace my SIM")

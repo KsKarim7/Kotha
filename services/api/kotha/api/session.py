@@ -1,5 +1,6 @@
 import asyncio
 import secrets
+import time
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -20,6 +21,7 @@ from kotha.api.protocol import (
     ReplyAudioEnd,
     ServerEvent,
     Start,
+    Timing,
     TranscriptEvent,
     Vad,
 )
@@ -220,7 +222,9 @@ class CallSession:
             return None
 
     async def _answer(self, turn_audio: np.ndarray) -> None:
+        asr_started = time.perf_counter()
         transcript = await self._transcribe(turn_audio)
+        asr_seconds = time.perf_counter() - asr_started
         failure = "asr_error" if transcript is None else unusable_reason(transcript)
         if failure is not None or transcript is None:
             log_event("turn_failed", call_id=self.call_id, reason=failure or "asr_error")
@@ -231,7 +235,16 @@ class CallSession:
             reply = await asyncio.to_thread(self._services.pipeline.reply, transcript.text)
             self._lang = reply.lang
         log_event("reply", call_id=self.call_id, kind=reply.kind.value, lang=reply.lang)
-        await self._speak(bot_text(reply))
+        tts_first_audio_seconds = await self._speak(bot_text(reply))
+        timing = Timing(
+            asr_seconds=asr_seconds,
+            retrieval_seconds=reply.stage_seconds.get("retrieval"),
+            llm_seconds=reply.stage_seconds.get("llm"),
+            tts_first_audio_seconds=tts_first_audio_seconds,
+        )
+        for stage, seconds in timing.model_dump(exclude={"type"}, exclude_none=True).items():
+            log_event("stage", call_id=self.call_id, stage=stage, seconds=round(seconds, 4))
+        await self._outgoing.put(timing)
         if reply.handoff_reason is not None:
             await self._outgoing.put(Handoff(reason=reply.handoff_reason))
 
@@ -242,15 +255,20 @@ class CallSession:
             return handoff(self._lang, HandoffReason.FAILED_TURNS)
         return fixed_reply(ReplyKind.REPEAT, self._lang)
 
-    async def _speak(self, text: BotText) -> None:
+    async def _speak(self, text: BotText) -> float | None:
         await self._outgoing.put(text)
+        started = time.perf_counter()
+        first_audio_seconds = None
         try:
             async for sentence_audio in self._services.tts.speak(text.text, text.lang):
+                if first_audio_seconds is None:
+                    first_audio_seconds = time.perf_counter() - started
                 await self._outgoing.put(float_to_pcm16(sentence_audio))
         except MODEL_ERRORS as error:
             log_event("tts_failed", call_id=self.call_id, error=type(error).__name__)
             await self._outgoing.put(ErrorEvent(code="tts_failed"))
         await self._outgoing.put(ReplyAudioEnd())
+        return first_audio_seconds
 
     async def _send(self) -> None:
         while True:

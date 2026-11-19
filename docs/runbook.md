@@ -351,6 +351,37 @@ cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
 - Logs carry only event names, call ids, reply kinds, languages and error codes; never what the
   caller or the bot said.
 
+## Latency evaluation
+
+`eval/latency.py` measures warm calls end to end. It speaks every question of
+`data/testsets/rag_test.csv` with the MMS voices (synthetic input: the TTS voice, not a person),
+cuts each clip at its last audible sample, and streams it to the app in real time as 20 ms frames,
+followed by silence, one call per question. It prints p50 and p95 per stage, the number of turns,
+the turns the VAD split before the clip ended (left out of the percentiles) and the reply kinds,
+and writes one row per turn to `--output`, which must be outside the repository.
+
+```bash
+cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
+  && KOTHA_ASR_MODEL=models/bn-tugstugi-medium-ct2 HF_HUB_OFFLINE=1 uv run python eval/latency.py \
+    --launch --port 8766 --output ~/kotha-runs/latency/run.csv --mlflow-dir ~/kotha-runs/mlflow
+```
+
+- `--launch` starts the app itself and reports cold start (process start to `/v1/ready`) once,
+  separately; without it the script waits for `/v1/ready` on `--port` and reports no cold start.
+- Stages, all in seconds:
+  - `vad`: true end of speech to the server's `speech_end` event; it includes the 700 ms hangover.
+  - `asr`, `retrieval`, `llm`, `tts_first_audio`: measured in the server and sent in the turn's
+    `timing` event. `llm` is the whole generation (summed over a regeneration), because MS1 does not
+    stream tokens. `tts_first_audio` is from the reply text to its first synthesised sentence; a
+    cached fixed reply makes it close to zero.
+  - `ttfa`: true end of speech to the first byte of bot audio at the client (the blueprint's TTFA,
+    measured from the true end of speech). `ttfa_from_vad` is the same from the `speech_end` event.
+- A number counts for `EVALUATION.md` only from a run with `git_dirty` false. Timings on cuda count
+  only after the GPU check in this runbook passed in the same session; `KOTHA_ASR_DEVICE` defaults
+  to `cpu`.
+- Gemini's free tier limits requests per minute; the run makes one call at a time, so it stays
+  well under that.
+
 ## Text chat and scenarios
 
 Both commands run the real answer pipeline (ADR 0008): hybrid retrieval over the database, bge-m3

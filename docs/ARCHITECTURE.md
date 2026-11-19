@@ -190,7 +190,10 @@ connection is one call. Messages are Pydantic models in `kotha.api.protocol`.
 | `error` | a message was refused or TTS failed | `code` |
 | `playback_stop` | not sent in MS1; it belongs to barge-in (MS2) | |
 
-Every reply is one `bot_text`, then one binary frame per sentence, then `reply_audio_end`. Error
+Every reply is one `bot_text`, then one binary frame per sentence, then `reply_audio_end`. A
+reply to a caller's turn is followed by a `timing` event (an addition) with `asr_seconds`,
+`retrieval_seconds`, `llm_seconds` and `tts_first_audio_seconds`, each `null` when that stage did
+not run; `eval/latency.py` reads it, and each value is also logged as `event=stage`. Error
 codes: `bad_control_message`, `not_started`, `already_started`, `consent_required`,
 `odd_length_frame`, `frame_too_large`, `too_many_bad_frames` (after 20 refused messages the call
 is closed), `tts_failed` (the text was sent but the audio stopped).

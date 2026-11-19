@@ -3,6 +3,7 @@ import logging
 import threading
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import contextmanager
+from dataclasses import replace
 from typing import Any
 
 import numpy as np
@@ -280,7 +281,33 @@ def test_an_asr_error_is_answered_and_two_failed_turns_hand_off() -> None:
     assert first(second_turn, "bot_text")["kind"] == "handoff"
     assert first(second_turn, "bot_text")["text"] == FIXED_REPLIES[ReplyKind.HANDOFF]["bn"]
     assert first(second_turn, "handoff") == {"type": "handoff", "reason": "failed_turns"}
-    assert types(second_turn)[-2:] == ["reply_audio_end", "handoff"]
+    assert types(second_turn)[-3:] == ["reply_audio_end", "timing", "handoff"]
+
+
+def test_each_answered_turn_reports_its_stage_timings() -> None:
+    class TimedPipeline(FakePipeline):
+        def reply(self, question: str) -> BotReply:
+            answer = super().reply(question)
+            return replace(answer, stage_seconds={"retrieval": 0.25, "llm": 1.5})
+
+    with call(pipeline=TimedPipeline()) as websocket:
+        greeting = started(websocket)
+        say(websocket)
+        events = events_until(websocket, "timing")
+    assert "timing" not in types(greeting)
+    assert types(events)[-2:] == ["reply_audio_end", "timing"]
+    timing = first(events, "timing")
+    assert timing["retrieval_seconds"] == 0.25 and timing["llm_seconds"] == 1.5
+    assert timing["asr_seconds"] >= 0 and timing["tts_first_audio_seconds"] >= 0
+
+
+def test_a_failed_turn_reports_asr_time_only() -> None:
+    with call(asr=FakeAsr(transcript(ratio=5.0))) as websocket:
+        started(websocket)
+        say(websocket)
+        timing = first(events_until(websocket, "timing"), "timing")
+    assert timing["asr_seconds"] >= 0
+    assert timing["retrieval_seconds"] is None and timing["llm_seconds"] is None
 
 
 def test_the_failed_turn_count_starts_again_after_a_handoff() -> None:

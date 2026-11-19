@@ -1,7 +1,7 @@
 import re
 import time
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import Protocol
 
@@ -186,6 +186,7 @@ class BotReply:
     text: str
     sources: tuple[Source, ...] = ()
     handoff_reason: HandoffReason | None = None
+    stage_seconds: Mapping[str, float] = field(default_factory=dict, compare=False)
 
 
 def fixed_reply(kind: ReplyKind, lang: Language) -> BotReply:
@@ -258,11 +259,31 @@ class AnswerPipeline:
         self._retriever.search(WARM_UP_QUESTION)
 
     def reply(self, question: str) -> BotReply:
+        stage_seconds: dict[str, float] = {}
+        reply = self._reply(question, stage_seconds)
+        return replace(reply, stage_seconds=stage_seconds)
+
+    def _search(self, question: str, stage_seconds: dict[str, float]) -> list[RetrievedChunk]:
+        started = time.perf_counter()
+        try:
+            return self._retriever.search(question)
+        finally:
+            stage_seconds["retrieval"] = time.perf_counter() - started
+
+    def _generate(self, prompt: str, stage_seconds: dict[str, float]) -> str:
+        started = time.perf_counter()
+        try:
+            return self._llm.generate(SYSTEM_PROMPT, prompt)
+        finally:
+            elapsed = time.perf_counter() - started
+            stage_seconds["llm"] = stage_seconds.get("llm", 0.0) + elapsed
+
+    def _reply(self, question: str, stage_seconds: dict[str, float]) -> BotReply:
         lang = caller_language(question)
         if is_account_request(question):
             return fixed_reply(ReplyKind.ACCOUNT_UNAVAILABLE, lang)
         try:
-            retrieved = self._retriever.search(question)
+            retrieved = self._search(question, stage_seconds)
         # RuntimeError covers a failed embedding (torch raises it, out of memory included)
         except (psycopg.Error, RuntimeError):
             return handoff(lang, HandoffReason.RETRIEVAL_FAILED)
@@ -277,7 +298,7 @@ class AnswerPipeline:
                 return handoff(lang, HandoffReason.NO_TIME_TO_RETRY)
             prompt = user_prompt(question, lang, list(chunks.values()), rejections)
             try:
-                answer = self._llm.generate(SYSTEM_PROMPT, prompt)
+                answer = self._generate(prompt, stage_seconds)
             except LLMError:
                 return handoff(lang, HandoffReason.LLM_FAILED)
             if NO_ANSWER in answer:
