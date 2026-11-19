@@ -27,7 +27,7 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
-      - ${HF_CACHE_DIR:-${HOME}/.cache/huggingface}:/root/.cache/huggingface:ro
+      - ${HF_HUB_CACHE_DIR:-${HOME}/.cache/huggingface/hub}:/root/.cache/huggingface/hub:ro
       - ./models:/app/models:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/v1/ready', timeout=2)"]

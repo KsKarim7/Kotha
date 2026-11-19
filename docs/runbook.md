@@ -356,9 +356,11 @@ cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
 `docker compose up` starts the database and the app. The app image (`Dockerfile`) is CPU-only: it
 installs the locked runtime dependencies without the `gpu` group, so torch comes from the PyTorch
 CPU index (ADR 0003). The image holds no model weights. The app reads them from two read-only
-mounts, the Hugging Face cache (`HF_CACHE_DIR`, default `~/.cache/huggingface`) and `./models`,
-and runs with `HF_HUB_OFFLINE=1`, so download them first (see "Embedding model and
-knowledge-base ingestion", "Text-to-speech voices" and "Bangla Whisper models").
+mounts, the Hugging Face hub cache (`HF_HUB_CACHE_DIR`, default `~/.cache/huggingface/hub`; only
+the hub folder, so a saved Hugging Face login token is not exposed) and `./models`, and runs with
+`HF_HUB_OFFLINE=1`, so download them first (see "Embedding model and knowledge-base ingestion",
+"Text-to-speech voices" and "Bangla Whisper models"). Create `models/` before the first
+`docker compose up`; if it is missing, Docker creates it owned by root.
 
 ```bash
 cd ~/kotha && docker compose up -d --wait db
@@ -367,7 +369,10 @@ docker compose up -d --wait app
 ```
 
 - The ingestion runs once per database volume, and again after `data/kb/` changes; it is not
-  repeated at every start because it re-embeds every chunk.
+  repeated at every start because it re-embeds every chunk. Without it the app still starts, but
+  retrieval finds nothing, so every policy question gets "please repeat".
+- `DATABASE_URL` is built from `POSTGRES_PASSWORD` without encoding, so the password must be
+  URL-safe (the `openssl rand -hex 24` password from "Local database" is).
 - Inside the stack the app reaches the database at host `db`; compose builds `DATABASE_URL` from
   `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB` in `.env`. `GEMINI_API_KEY` comes from
   `.env` too. `KOTHA_ASR_MODEL` defaults to `/app/models/bn-tugstugi-medium-ct2`.
