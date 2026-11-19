@@ -257,6 +257,11 @@ def test_only_strict_grouping_makes_one_number_and_no_digit_is_left(
         ("৩০,৬০ বা ৯০ দিন", "ত্রিশ ষাট বা নব্বই দিন"),
         ("১০০ টি প্যাক", "একশো টি প্যাক"),
         ("১০০০ এসএমএস", "এক হাজার এসএমএস"),
+        ("১০০ টায়", "একশো টায়"),
+        ("7470 টাইপ করে পাঠান", "সাত চার সাত শূন্য টাইপ করে পাঠান"),
+        ("৭৪৭ টিকিট", "সাত চার সাত টিকিট"),
+        ("747 টিপুন", "সাত চার সাত টিপুন"),
+        ("৭৪৭ টেলিকম", "সাত চার সাত টেলিকম"),
     ],
 )
 def test_bangla_lists_and_spaced_counts(sentence: str, spoken: str) -> None:
@@ -296,6 +301,11 @@ def test_empty_and_punctuation_only_text_is_empty() -> None:
 )
 def test_split_sentences(text: str, sentences: list[str]) -> None:
     assert split_sentences(text) == sentences
+
+
+def test_speakable_sentences_drops_sentences_without_a_letter() -> None:
+    assert speakable_sentences("' । ং । Yes.", "en") == ["yes"]
+    assert speakable_sentences("ং। হ্যাঁ।", "bn") == [nfc("হ্যাঁ")]
 
 
 def test_speakable_sentences_drops_empty_sentences() -> None:
