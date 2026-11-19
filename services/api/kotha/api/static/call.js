@@ -10,28 +10,60 @@ const stopButton = document.getElementById("stop");
 const status = document.getElementById("status");
 const transcript = document.getElementById("transcript");
 
-let call = null;
+let current = null;
+
+class Cancelled extends Error {}
 
 consent.addEventListener("change", () => {
-  if (!consent.checked && call !== null) {
-    endCall();
+  if (!consent.checked && current !== null) {
+    endCall(current);
   }
-  startButton.disabled = !consent.checked || call !== null;
+  updateButtons();
 });
 startButton.addEventListener("click", () => {
-  // the call exists from the first click, so a second click or any failure finds it and cleans up
-  call = { context: new AudioContext(), microphone: null, socket: null, playAt: 0, lastError: null };
-  startButton.disabled = true;
-  startCall(call).catch((error) => showFailure(error));
+  let context;
+  try {
+    context = new AudioContext();
+  } catch (error) {
+    status.textContent = `This browser cannot play or record audio: ${error.message}`;
+    return;
+  }
+  const pending = newCall(context);
+  current = pending;
+  updateButtons();
+  startCall(pending).catch((error) => showFailure(pending, error));
 });
-stopButton.addEventListener("click", () => endCall());
+stopButton.addEventListener("click", () => {
+  if (current !== null) {
+    endCall(current);
+  }
+});
+
+function newCall(context) {
+  return {
+    context,
+    microphone: null,
+    socket: null,
+    playAt: 0,
+    lastError: null,
+    sending: false,
+    stopTimer: null,
+    endedByCaller: false,
+    ended: false,
+  };
+}
+
+function ensureLive(pending) {
+  if (pending.ended) {
+    release(pending);
+    throw new Cancelled();
+  }
+}
 
 async function waitUntilReady(pending) {
   const giveUpAt = Date.now() + READY_MAX_WAIT_MS;
   while (Date.now() < giveUpAt) {
-    if (call !== pending) {
-      throw new Error("the call was cancelled");
-    }
+    ensureLive(pending);
     try {
       const response = await fetch("/v1/ready", {
         cache: "no-store",
@@ -51,36 +83,42 @@ async function waitUntilReady(pending) {
 async function startCall(pending) {
   status.textContent = "Waiting for the server…";
   await waitUntilReady(pending);
+  ensureLive(pending);
   pending.microphone = await navigator.mediaDevices.getUserMedia({
     audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
   });
+  ensureLive(pending);
   await pending.context.audioWorklet.addModule("/static/pcm-worklet.js");
+  ensureLive(pending);
   const frames = new AudioWorkletNode(pending.context, "pcm-frames", {
     numberOfInputs: 1,
     numberOfOutputs: 0,
   });
-  let started = false;
   frames.port.onmessage = (message) => {
-    if (started && pending.socket.readyState === WebSocket.OPEN) {
+    if (pending.sending && pending.socket.readyState === WebSocket.OPEN) {
       pending.socket.send(message.data);
     }
   };
   pending.context.createMediaStreamSource(pending.microphone).connect(frames);
-  if (call !== pending || !consent.checked) {
-    throw new Error("the call was cancelled");
-  }
 
   const scheme = location.protocol === "https:" ? "wss" : "ws";
   const socket = new WebSocket(`${scheme}://${location.host}/v1/calls/stream`);
   socket.binaryType = "arraybuffer";
   pending.socket = socket;
   socket.addEventListener("open", () => {
-    socket.send(JSON.stringify({ type: "start", sample_rate: 16000, consent: consent.checked }));
-    started = true;
-    stopButton.disabled = false;
+    if (pending.ended || !consent.checked) {
+      release(pending);
+      return;
+    }
+    socket.send(JSON.stringify({ type: "start", sample_rate: 16000, consent: true }));
+    pending.sending = true;
+    updateButtons();
     status.textContent = "Connected. Speak after the greeting.";
   });
   socket.addEventListener("message", (message) => {
+    if (pending.ended) {
+      return;
+    }
     if (message.data instanceof ArrayBuffer) {
       play(pending, message.data);
     } else {
@@ -88,16 +126,21 @@ async function startCall(pending) {
     }
   });
   socket.addEventListener("close", (event) => {
-    status.textContent = closeMessage(event.code, pending.lastError);
+    if (current === pending || current === null) {
+      status.textContent = closeMessage(pending, event.code);
+    }
     release(pending);
   });
 }
 
-function closeMessage(code, lastError) {
-  if (code === 1008) {
-    return `Call refused by the server (${lastError || "policy"}).`;
+function closeMessage(pending, code) {
+  if (pending.endedByCaller || code === 1000) {
+    return "Call ended.";
   }
-  return code === 1000 ? "Call ended." : "Connection lost.";
+  if (code === 1008) {
+    return `Call refused by the server (${pending.lastError || "policy"}).`;
+  }
+  return "Connection lost.";
 }
 
 function play(pending, buffer) {
@@ -150,45 +193,50 @@ function addLine(speaker, text, sources, lang) {
   transcript.appendChild(line);
 }
 
-function endCall() {
-  const pending = call;
-  if (pending === null) {
-    return;
+function endCall(pending) {
+  pending.sending = false;
+  pending.endedByCaller = true;
+  if (pending.microphone !== null) {
+    pending.microphone.getTracks().forEach((track) => track.stop());
   }
   const socket = pending.socket;
-  if (socket === null || socket.readyState !== WebSocket.OPEN) {
+  if (socket === null || socket.readyState !== WebSocket.OPEN || pending.stopTimer !== null) {
     release(pending);
     return;
   }
   socket.send(JSON.stringify({ type: "stop" }));
-  setTimeout(() => {
-    if (socket.readyState !== WebSocket.CLOSED) {
-      socket.close();
-    }
-    release(pending);
-  }, STOP_GRACE_MS);
+  pending.stopTimer = setTimeout(() => release(pending), STOP_GRACE_MS);
+  updateButtons();
 }
 
 function release(pending) {
+  pending.ended = true;
+  pending.sending = false;
+  clearTimeout(pending.stopTimer);
   if (pending.microphone !== null) {
     pending.microphone.getTracks().forEach((track) => track.stop());
   }
-  if (pending.socket !== null && pending.socket.readyState === WebSocket.OPEN) {
-    pending.socket.close();
+  const socket = pending.socket;
+  if (socket !== null && socket.readyState <= WebSocket.OPEN) {
+    socket.close();
   }
   if (pending.context.state !== "closed") {
     pending.context.close();
   }
-  if (call === pending) {
-    call = null;
+  if (current === pending) {
+    current = null;
   }
-  stopButton.disabled = call === null;
-  startButton.disabled = !consent.checked || call !== null;
+  updateButtons();
 }
 
-function showFailure(error) {
-  status.textContent = `Could not start the call: ${error.message}`;
-  if (call !== null) {
-    release(call);
+function updateButtons() {
+  startButton.disabled = !consent.checked || current !== null;
+  stopButton.disabled = current === null;
+}
+
+function showFailure(pending, error) {
+  release(pending);
+  if (!(error instanceof Cancelled) && current === null) {
+    status.textContent = `Could not start the call: ${error.message}`;
   }
 }
