@@ -338,7 +338,9 @@ cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
   the app enforces (32,000 bytes).
 - Startup loads every model and warms it: Silero once, the voices through the fixed prompts,
   Whisper on one synthesised Bangla sentence, and one retrieval search (no LLM call). uvicorn
-  accepts no connection until this is done, so the first call is as fast as later ones.
+  accepts no connection until this is done, so no call pays for loading a model. If loading or
+  warm-up fails, uvicorn logs "Application startup failed" and exits with code 3, and
+  `/v1/ready` never answers.
 - `GET /v1/ready` answers `{"status":"ready","startup_seconds":…}` once startup is complete;
   before that the connection is refused. Clients (the browser page, `eval/latency.py`) poll it
   before they open a call. `startup_seconds` covers loading and warm-up inside the app; the time
