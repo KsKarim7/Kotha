@@ -1,6 +1,26 @@
 # Architecture
 
-Kotha is at an early stage. This document describes only what exists or has been decided.
+This document describes what exists at Milestone 1 (a browser call works) and what has been
+decided. Later milestones (the phone path, tools, analytics) are not described until they exist.
+
+## Overview
+
+```
+browser (mic, AudioWorklet)                          docker compose on one host
+   |  PCM16 16 kHz frames, JSON start/stop
+   v
+/v1/calls/stream  (FastAPI, one CallSession per call, anyio task group)
+   receive loop -> Silero VAD + TurnDetector  --(confirmed speech only)--> turn queue
+   turn handler -> Whisper (faster-whisper) -> decode gate
+                -> AnswerPipeline: account routing -> hybrid retrieval (pgvector + BM25, RRF)
+                                   -> Gemini -> citation, number, language and claim checks
+                -> speakable text -> MMS-TTS, one sentence at a time
+   send loop    -> JSON events + PCM16 audio back to the browser
+PostgreSQL 16 + pgvector: kb_chunks (126 chunks of 16 bilingual KB documents)
+```
+
+Every model call runs in a worker thread, never on the event loop. Models load and warm once at
+startup, before the app accepts connections (`/v1/ready`).
 
 ## Audio formats
 
@@ -10,12 +30,12 @@ All audio inside Kotha is float32, mono, 16 kHz, with samples in [-1, 1]. Module
 audio in this format. Sample-rate and PCM conversion happen at the edges and inside the
 telephony simulator.
 
-### Edge formats (planned)
+### Edge formats
 
-| Edge | Module | Wire format |
-| --- | --- | --- |
-| WebSocket | M8 | 16 kHz PCM16, little-endian |
-| Asterisk AudioSocket | M9 | 8 kHz PCM16, little-endian |
+| Edge | Module | Wire format | State |
+| --- | --- | --- | --- |
+| WebSocket | M8 | 16 kHz PCM16, little-endian | built |
+| Asterisk AudioSocket | M9 | 8 kHz PCM16, little-endian | planned |
 
 A 20 ms frame is 320 samples (640 bytes) at 16 kHz and 160 samples (320 bytes) at 8 kHz.
 
@@ -135,6 +155,37 @@ Bangla, or `mobile` written in Bangla script) stays an error: later steps receiv
 as written, so transliterating it here would hide an error they still see.
 
 Any change to `normalize` changes every WER number, so all evaluations are rerun after one.
+
+## Knowledge base and retrieval
+
+The knowledge base is 16 fictional documents, each in Bangla and English, as Markdown files in
+`data/kb/` (ADR 0006). They hold descriptions, rules and product facts, never prices or balances.
+`kotha.kb.chunks` splits each document at its `## ` headings into chunks of at most 300 words,
+never splitting a table, with ids `<doc_id>.<lang>.<index>`. `python -m kotha.kb.ingest` embeds
+each chunk with bge-m3 (pinned, offline, CPU) and stores it in `kb_chunks` in one idempotent
+transaction.
+
+`kotha.rag.retriever.HybridRetriever.search` takes the top 20 chunks by pgvector cosine distance
+and the top 20 by our own BM25 (`kotha.rag.bm25`, with the loanword lexicon expanding Latin and
+Bangla spellings of English terms), fuses the two rankings by reciprocal rank fusion (k = 60) and
+returns 4 chunks. `kotha.rag.citations.verify_answer` checks that every sentence of an answer ends
+with a citation of a retrieved chunk and that every number in it appears in a cited chunk.
+
+## Answer pipeline
+
+`kotha.dialogue.answer.AnswerPipeline.reply` turns one transcript into one reply (ADR 0008):
+
+1. Code, not the prompt, routes account requests (own balance, buying or cancelling a pack) to a
+   fixed "not available yet" reply; MS1 has no account tools.
+2. Hybrid retrieval returns 4 chunks; nothing retrieved gives "please repeat", and a database or
+   embedding error gives the handoff reply.
+3. Gemini (ADR 0007) gets a constant system prompt and the passages, with the question last. The
+   reply language follows the caller: Bangla if the question has any Bengali letter.
+4. Code checks the answer (citations, numbers, no money, language, at most two sentences, no
+   claim about the caller's account) and regenerates once with a note naming the problems. A
+   second failure, `NO_ANSWER`, an LLM error or a slow first attempt gives the handoff reply.
+
+The reply carries its cited sources and the time spent in retrieval and the LLM.
 
 ## Text-to-speech
 

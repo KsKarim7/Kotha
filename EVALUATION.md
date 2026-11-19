@@ -25,6 +25,8 @@ Results for Milestone 1. Every result in this report comes from a committed eval
 | 700 ms | [measure] | [measure] | [measure] |
 | 900 ms | [measure] | [measure] | [measure] |
 
+Needs: the recorded `asr_test` set with turn boundaries marked, and noise-only clips; then `eval/vad_turns.py` per hangover setting.
+
 Interpretation: [to be written]
 
 ## ASR
@@ -34,6 +36,8 @@ Interpretation: [to be written]
 | [model] | [audio] | [lang] | [measure] | [measure] | [measure] | [measure] |
 
 The text normalisation applied to references and hypotheses will be stated with the results.
+
+Needs: the recorded `asr_test` set (consented speakers, ADR 0002) with references checked by `eval/lint_references.py`; then `eval/wer.py` for each model at 16 kHz and through simulated telephony (runbook, "WER evaluation"). The same recordings give the ASR-transcribed retrieval column.
 
 Interpretation: [to be written]
 
@@ -70,6 +74,8 @@ Interpretation: [to be written]
 | Measure | Value |
 | --- | --- |
 | RTF | [measure] |
+
+Needs: three listeners to rate the 40 blind clips from `eval/listening_sheet.py` (runbook, "Listening test") and a scoring script; RTF from a committed run, which `eval/tts_probe.py` can provide once it logs its timings.
 
 Interpretation: [to be written]
 
