@@ -79,20 +79,20 @@ Warm calls, one call at a time, on the CPU, in seconds (56 counted turns):
 
 | Stage | p50 | p95 |
 | --- | --- | --- |
-| vad (true end of speech to the VAD's end-of-turn decision, 700 ms hangover included) | 0.746 | 0.770 |
+| vad (true end of speech to the server's `speech_end` event, 700 ms hangover included) | 0.746 | 0.770 |
 | asr | 5.261 | 9.357 |
 | retrieval | 0.317 | 0.594 |
-| llm (whole generation; MS1 does not stream, so first-token time is [measure]) | 1.722 | 9.958 |
+| llm (whole generation, summed over a regeneration; MS1 does not stream, so first-token time is [measure]) | 1.722 | 9.958 |
 | tts_first_audio (reply text to the first synthesised sentence) | 4.496 | 7.826 |
 | TTFA, from the true end of speech | 12.742 | 24.036 |
 | TTFA, from the VAD decision | 12.002 | 23.278 |
 
 Cold start (process start to `/v1/ready`), reported once and not part of the table: 188.9 s, of which the app's own loading and warm-up (`startup_seconds`) took 179.0 s.
 
-Values are the run's metrics rounded to 3 decimals. Run: `eval/latency.py --launch` (runbook, "Latency evaluation") on commit `aeb6516`, `git_dirty` false, MLflow run `fd75c9a5215c447e87ef24cce5cfcc58` in the experiment `kotha-latency`. ASR: `models/bn-tugstugi-medium-ct2` on the CPU. LLM: Gemini through `GeminiClient`. Voices: MMS on the CPU.
+Values are the run's metrics rounded to 3 decimals. Run: `eval/latency.py --launch` (runbook, "Latency evaluation") on commit `aeb6516`, `git_dirty` false, MLflow run `fd75c9a5215c447e87ef24cce5cfcc58` in the experiment `kotha-latency`. ASR: `models/bn-tugstugi-medium-ct2` on the CPU. LLM: Gemini through `GeminiClient` (`gemini-3.1-flash-lite`, retrying on `gemini-3.5-flash-lite`; the model that answered is not logged per turn). Voices: MMS on the CPU.
 
 - **Synthetic inputs.** The callers are the 72 `rag_test` questions (`rag_test.csv`, SHA-256 `82958d25…`) spoken by the MMS voices, not people, and streamed in real time as 20 ms frames. A recorded speaker may give different ASR times and turn ends.
-- **What is counted.** One uncounted warm-up turn ran first. The table counts the 56 turns that got an answer, were not split by the VAD and did not fail. Of the 72 turns, 58 got an answer and 14 a handoff; 2 answered turns were split and left out; none failed. Leaving handoffs out also leaves out slow LLM paths that end in a handoff, which biases `llm` and TTFA low.
-- **Cold start.** It was measured while the harness process also held the TTS models in memory on a 10 GB WSL machine; earlier, uncommitted startups of the same app were shorter. It is one run.
+- **What is counted.** One uncounted warm-up turn ran first (question `en01`, which ended in a handoff). The table counts the 56 turns that got an answer, were not split by the VAD and did not fail. Of the 72 turns, 58 got an answer and 14 a handoff; 2 answered turns were split and left out; none failed. Leaving handoffs out also leaves out slow LLM paths that end in a handoff, which biases `llm` and TTFA low.
+- **Cold start.** The app was started right after the harness had loaded the MMS voices and synthesised all 72 clips in its own process, on the machine under Hardware. It is one run.
 
 Interpretation: [to be written]
