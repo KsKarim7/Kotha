@@ -76,6 +76,13 @@ any character its tokenizer would drop as a bug that tests catch, not something 
 model, with one known exception: the English `k`, which cannot be avoided in English text. It is
 allowed and goes on the listening sheet.
 
+`kotha.tts.speakable` (M7-2) applies these rules. A number of one or two digits, a number with
+grouping commas or a decimal point, and a number followed by a unit (GB, MB, days, দিন, ঘণ্টা, a
+count suffix such as টা) is read as a number. Any other run of three or more digits, and any run
+with a leading zero, is read digit by digit, because in this domain it is almost always a short
+code, an SMS number or a phone number (`747`, `7470`, `01700000009`). An unknown Latin word in a
+Bangla reply is spelled with letter names; a known one comes from a small loanword map.
+
 The status stays "proposed" until the listening sheet (M7-3) is rated and RTF comes from a
 committed run.
 
