@@ -258,9 +258,9 @@ clips (see "Bangla Whisper models" for the local model):
 
 ```bash
 cd ~/kotha && HF_HUB_OFFLINE=1 uv run python eval/tts_probe.py \
-  --output-dir ~/kotha-runs/tts-probe --asr-model models/bn-tugstugi-medium-ct2
+  --output-dir ~/kotha-runs/tts-probe/bn-asr --asr-model models/bn-tugstugi-medium-ct2
 cd ~/kotha && HF_HUB_OFFLINE=1 uv run python eval/tts_probe.py \
-  --output-dir ~/kotha-runs/tts-probe --asr-model medium
+  --output-dir ~/kotha-runs/tts-probe/en-asr --asr-model medium
 ```
 
 - The tokenizer drops every character outside the voice's `vocab.json` without a warning, so a

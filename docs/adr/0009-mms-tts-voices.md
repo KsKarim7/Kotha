@@ -73,7 +73,8 @@ step (M7-2) writes numbers as words, codes symbol by symbol in words, Latin term
 for the Bangla voice and the brand in Latin for the English voice, and applies NFC. No digit reaches
 either voice, which also keeps the Bangla `6` blank out of the input. The TTS service (M7-3) treats
 any character its tokenizer would drop as a bug that tests catch, not something to pass to the
-model.
+model, with one known exception: the English `k`, which cannot be avoided in English text. It is
+allowed and goes on the listening sheet.
 
 The status stays "proposed" until the listening sheet (M7-3) is rated and RTF comes from a
 committed run.
