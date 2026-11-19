@@ -55,10 +55,14 @@ def test_the_client_follows_the_call_protocol() -> None:
     script = (STATIC_DIR / "call.js").read_text(encoding="utf-8")
     worklet = (STATIC_DIR / "pcm-worklet.js").read_text(encoding="utf-8")
     assert '"/v1/ready"' in script and "/v1/calls/stream" in script
-    assert 'type: "start", sample_rate: 16000, consent: true' in script
+    assert 'type: "start", sample_rate: 16000, consent: consent.checked' in script
     assert 'type: "stop"' in script
     assert "echoCancellation: true" in script
-    assert script.index('type: "start"') < script.index("socket.send(message.data)")
+    assert "AbortSignal.timeout(READY_REQUEST_TIMEOUT_MS)" in script
+    assert "numberOfOutputs: 0" in script
+    assert "if (started && pending.socket.readyState === WebSocket.OPEN)" in script
+    assert "started = true" in script
+    assert script.index('type: "start"') < script.index("started = true")
     for event in ("vad", "transcript", "bot_text", "handoff", "reply_audio_end", "error"):
         assert f'event.type === "{event}"' in script
     assert "TARGET_RATE = 16000" in worklet and "FRAME_SAMPLES = 320" in worklet
@@ -68,4 +72,10 @@ def test_the_client_follows_the_call_protocol() -> None:
 def test_the_page_waits_for_readiness_before_the_microphone() -> None:
     script = (STATIC_DIR / "call.js").read_text(encoding="utf-8")
     start = script[script.index("async function startCall") :]
-    assert start.index("await waitUntilReady()") < start.index("getUserMedia")
+    assert start.index("await waitUntilReady(pending)") < start.index("getUserMedia")
+
+
+def test_server_text_is_inserted_as_text_only() -> None:
+    script = (STATIC_DIR / "call.js").read_text(encoding="utf-8")
+    assert "innerHTML" not in script and "insertAdjacentHTML" not in script
+    assert "textContent = text" in script
