@@ -269,6 +269,28 @@ cd ~/kotha && HF_HUB_OFFLINE=1 uv run python eval/tts_probe.py \
 - The timings are from one run on whatever the CPU is doing at the time; they are not results for
   `EVALUATION.md`.
 
+### Listening test
+
+`data/listening/tts_sentences.csv` holds 20 fixed sentences (14 bn, 6 en; data sizes, times, codes,
+phone numbers and English terms; no prices). `eval/listening_sheet.py` renders each one twice with
+the real voices: `before` sends the raw text to the voice, `after` sends `kotha.tts.speakable`
+output. The 40 clips are shuffled with a fixed seed and named `clip-01.wav` to `clip-40.wav`, so a
+listener cannot tell the versions apart:
+
+```bash
+cd ~/kotha && HF_HUB_OFFLINE=1 uv run python eval/listening_sheet.py \
+  --output-dir ~/kotha-runs/listening/v1
+```
+
+- `ratings.csv` is the sheet for listeners: clip, language, the intended sentence and one empty
+  column per listener. Each listener plays every clip and writes a score from 1 (cannot understand
+  it) to 5 (clear and natural), judging whether the clip says the intended sentence, numbers and
+  codes included.
+- `key.csv` maps each clip to its sentence, category, version and the exact text sent to the voice.
+  Keep it away from the listeners until they have finished.
+- `--output-dir` must be outside the repository. Scores go into `EVALUATION.md` only after three
+  listeners have rated every clip.
+
 ## Retrieval evaluation
 
 `eval/retrieval.py` asks every question in `data/testsets/rag_test.csv` and scores four
