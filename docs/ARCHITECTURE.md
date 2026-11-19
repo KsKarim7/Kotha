@@ -119,7 +119,9 @@ most tokens in one segment, and word timings when asked for.
   -inf, `max_no_speech_prob` to 1.0, `max_compression_ratio` to 0.0 and
   `max_segment_tokens` to 0; these are the wrapper's values, not the model's.
 
-The live model and compute type are chosen in M3-6, from WER and the device check.
+The app takes its model from `KOTHA_ASR_MODEL`; the Docker stack defaults to
+`models/bn-tugstugi-medium-ct2` on the CPU with int8. M3-6 confirms or replaces that choice from
+WER and the device check.
 
 ## Text normalisation
 
@@ -160,8 +162,8 @@ Any change to `normalize` changes every WER number, so all evaluations are rerun
 
 The knowledge base is 16 fictional documents, each in Bangla and English, as Markdown files in
 `data/kb/` (ADR 0006). They hold descriptions, rules and product facts, never prices or balances.
-`kotha.kb.chunks` splits each document at its `## ` headings into chunks of at most 300 words,
-never splitting a table, with ids `<doc_id>.<lang>.<index>`. `python -m kotha.kb.ingest` embeds
+`kotha.kb.chunks` splits each document at its `## ` headings into chunks of up to 300 words (a
+single longer paragraph or table stays whole), never splitting a table, with ids `<doc_id>.<lang>.<index>`. `python -m kotha.kb.ingest` embeds
 each chunk with bge-m3 (pinned, offline, CPU) and stores it in `kb_chunks` in one idempotent
 transaction.
 
@@ -177,8 +179,8 @@ with a citation of a retrieved chunk and that every number in it appears in a ci
 
 1. Code, not the prompt, routes account requests (own balance, buying or cancelling a pack) to a
    fixed "not available yet" reply; MS1 has no account tools.
-2. Hybrid retrieval returns 4 chunks; nothing retrieved gives "please repeat", and a database or
-   embedding error gives the handoff reply.
+2. Hybrid retrieval returns 4 chunks; nothing retrieved (a question with no search tokens) gives
+   "please repeat", and a database or embedding error gives the handoff reply.
 3. Gemini (ADR 0007) gets a constant system prompt and the passages, with the question last. The
    reply language follows the caller: Bangla if the question has any Bengali letter.
 4. Code checks the answer (citations, numbers, no money, language, at most two sentences, no
