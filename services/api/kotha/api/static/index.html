@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="bn">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kotha call</title>
+  <link rel="stylesheet" href="/static/call.css">
+</head>
+<body>
+  <main>
+    <h1>Kotha</h1>
+    <p class="note">A demo voice assistant for the fictional operator Nodi Telecom.</p>
+    <label class="consent">
+      <input type="checkbox" id="consent">
+      I agree that my speech is transcribed and my question is sent to an external language model.
+    </label>
+    <div class="controls">
+      <button id="start" disabled>Start call</button>
+      <button id="stop" disabled>End call</button>
+      <span id="status" role="status">Tick the box to start.</span>
+    </div>
+    <ol id="transcript" aria-live="polite"></ol>
+  </main>
+  <script type="module" src="/static/call.js"></script>
+</body>
+</html>

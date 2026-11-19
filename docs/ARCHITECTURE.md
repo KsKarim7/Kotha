@@ -203,6 +203,16 @@ endpoint never reaches a cold model. A failed load or warm-up stops startup (uvi
 the app never serves calls half-loaded. Latency runs measure warm calls only and report cold start
 separately.
 
+**Browser client.** The app serves one page at `/` (`kotha/api/static/`), with no external
+scripts, fonts or styles. After the caller ticks the consent box and presses Start, the page polls
+`/v1/ready`, opens the microphone with echo cancellation, noise suppression and automatic gain
+control, and connects to `/v1/calls/stream`. It sends `start` first and only then the audio: an
+AudioWorklet (`pcm-worklet.js`) resamples the microphone from the context rate to 16 kHz by
+linear interpolation and posts 20 ms frames of PCM16 (320 samples). There is no low-pass filter
+before the down-sampling, so energy above 8 kHz can fold into the band; speech carries little
+there. Bot audio is played back in arrival order at 16 kHz. The transcript panel shows the
+caller's transcript and each bot reply with the titles of its cited documents. End sends `stop`.
+
 ## Browser call: the call loop
 
 `kotha.api.session.CallSession` runs one anyio task group per call with three tasks:
