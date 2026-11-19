@@ -1,0 +1,53 @@
+body {
+  font-family: system-ui, "Noto Sans Bengali", sans-serif;
+  margin: 0;
+  background: #f6f7f9;
+  color: #1d2430;
+}
+
+main {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 1.5rem 1rem;
+}
+
+.note {
+  color: #5a6475;
+}
+
+.controls {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin: 1rem 0;
+}
+
+button {
+  padding: 0.5rem 1rem;
+  font-size: 1rem;
+}
+
+#transcript {
+  list-style: none;
+  padding: 0;
+}
+
+#transcript li {
+  background: #fff;
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  margin-bottom: 0.5rem;
+}
+
+#transcript li.caller {
+  border-left: 4px solid #2f6fdb;
+}
+
+#transcript li.bot {
+  border-left: 4px solid #1f9d6b;
+}
+
+.sources {
+  font-size: 0.85rem;
+  color: #5a6475;
+}

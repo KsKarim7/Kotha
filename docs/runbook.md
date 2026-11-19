@@ -332,6 +332,9 @@ cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
   uv run uvicorn kotha.api.app:app --host 127.0.0.1 --port 8000 --ws-max-size 65536
 ```
 
+- Open http://127.0.0.1:8000 in Chrome or Firefox on the same machine (a browser only allows the
+  microphone on `localhost` or HTTPS), tick the consent box, press Start, wait for the greeting,
+  then speak. Use headphones if echo cancellation lets the bot's voice back in.
 - `KOTHA_ASR_MODEL` is required: a faster-whisper model name or a local CTranslate2 folder.
   `KOTHA_ASR_DEVICE` defaults to `cpu`; use `cuda` only after the GPU check above.
 - `--ws-max-size 65536` keeps uvicorn from buffering frames far larger than the one-second limit

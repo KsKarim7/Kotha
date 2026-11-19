@@ -3,10 +3,13 @@ import os
 import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import ExitStack, asynccontextmanager
+from pathlib import Path
 from typing import Protocol
 
 import numpy as np
 from fastapi import FastAPI, Request, WebSocket
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from kotha.api.protocol import Readiness
 from kotha.api.session import CallServices, CallSession, Transcriber
@@ -16,6 +19,7 @@ from kotha.tts.service import SentenceAudio
 from kotha.vad import WINDOW_SAMPLES
 
 ServiceLoader = Callable[[ExitStack], CallServices]
+STATIC_DIR = Path(__file__).resolve().parent / "static"
 WARM_UP_SENTENCE = "প্যাকের মেয়াদ ত্রিশ দিন।"
 
 
@@ -39,6 +43,11 @@ def create_app(load_services: ServiceLoader) -> FastAPI:
             yield
 
     app = FastAPI(title="Kotha", lifespan=lifespan)
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+    @app.get("/", include_in_schema=False)
+    async def page() -> FileResponse:
+        return FileResponse(STATIC_DIR / "index.html")
 
     @app.get("/v1/ready")
     async def ready(request: Request) -> Readiness:
