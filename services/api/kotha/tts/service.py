@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Mapping
 from typing import Protocol
 
 import numpy as np
@@ -45,17 +45,23 @@ class TtsService:
         cached = self._cache.get((lang, text))
         if cached is not None:
             return cached
-        voice = self._voices[lang]
         return tuple(
-            resample(voice.synthesize(sentence), voice.sampling_rate, SAMPLE_RATE_HZ)
-            for sentence in speakable_sentences(text, lang)
+            self.sentence_audio(sentence, lang) for sentence in speakable_sentences(text, lang)
         )
 
-    async def speak(self, text: str, lang: Language) -> SentenceAudio:
+    def sentence_audio(self, speakable_sentence: str, lang: Language) -> np.ndarray:
+        voice = self._voices[lang]
+        return resample(voice.synthesize(speakable_sentence), voice.sampling_rate, SAMPLE_RATE_HZ)
+
+    async def speak(self, text: str, lang: Language) -> AsyncIterator[np.ndarray]:
         cached = self._cache.get((lang, text))
         if cached is not None:
-            return cached
-        return await asyncio.to_thread(self.synthesize, text, lang)
+            for audio in cached:
+                yield audio
+            return
+        # one worker call per sentence, so a cancelled reply stops after the current sentence
+        for sentence in speakable_sentences(text, lang):
+            yield await asyncio.to_thread(self.sentence_audio, sentence, lang)
 
 
 def load_tts_service() -> TtsService:

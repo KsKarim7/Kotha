@@ -152,8 +152,10 @@ text a voice receives must contain only characters it knows.
   Every synthesis sets the torch seed to 0 under one process-wide lock, so the same text gives
   the same audio.
 - **Service** (`kotha.tts.service.TtsService`). It routes a reply to the voice for its language
-  and returns one float32 array at 16 kHz per sentence, so later milestones can start playing
-  the first sentence early. `speak` runs synthesis in a worker thread (`asyncio.to_thread`), never
-  on the event loop. The greeting and the fixed replies (handoff, "please repeat", "not
+  and gives one float32 array at 16 kHz per sentence. `speak` is an async iterator that runs one
+  worker-thread call (`asyncio.to_thread`) per sentence, never on the event loop, so the first
+  sentence can play before the rest is ready, and a cancelled reply stops after the sentence in
+  progress. `load_tts_service` blocks for about 15 s while it loads both voices and warms the
+  cache, so the app calls it in a worker thread at startup. The greeting and the fixed replies (handoff, "please repeat", "not
   available yet") are synthesised once at start and served from a read-only cache; answers are
   not cached. `to_telephony_rate` resamples to 8 kHz for the phone path.

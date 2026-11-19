@@ -63,7 +63,9 @@ def test_rating_sheet_hides_the_version_and_the_key_names_it(tmp_path: Path) -> 
     [
         ("id,lang,text\nx,bn,হ্যাঁ\n", "missing columns: category"),
         ("id,lang,category,text\nx,fr,plain,Oui\n", "unknown lang 'fr'"),
-        ("id,lang,category,text\nx,en,plain, \n", "must not be empty"),
+        ("id,lang,category,text\nx,en,plain, \n", "text must not be empty"),
+        ("id,lang,category,text\nx,en,plain\n", "text must not be empty"),
+        ("id,lang,category,text\nx,en,,Yes\n", "category must not be empty"),
         ("id,lang,category,text\nx,en,plain,Yes\nx,en,plain,No\n", "repeated sentence ids"),
     ],
 )
@@ -74,12 +76,21 @@ def test_malformed_sentence_files_are_refused(tmp_path: Path, content: str, mess
         read_sentences(path)
 
 
-def test_main_refuses_an_output_dir_inside_the_repository(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize(
+    ("output_dir", "key"),
+    [
+        (REPO_ROOT / "eval" / "listening-out", Path("/tmp/listening-key.csv")),
+        (Path("/tmp/listening-out"), REPO_ROOT / "eval" / "key.csv"),
+        (Path("/tmp/listening-out"), Path("/tmp/listening-out/key.csv")),
+    ],
+)
+def test_main_refuses_a_key_or_output_in_the_repository_or_a_key_beside_the_clips(
+    monkeypatch: pytest.MonkeyPatch, output_dir: Path, key: Path
 ) -> None:
-    output_dir = REPO_ROOT / "eval" / "listening-out"
-    monkeypatch.setattr("sys.argv", ["listening_sheet.py", "--output-dir", str(output_dir)])
+    argv = ["listening_sheet.py", "--output-dir", str(output_dir), "--key", str(key)]
+    monkeypatch.setattr("sys.argv", argv)
     with pytest.raises(SystemExit) as raised:
         main()
     assert raised.value.code == 2
     assert not output_dir.exists()
+    assert not key.exists()
