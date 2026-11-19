@@ -3,6 +3,7 @@ import unicodedata
 
 from kotha.dialogue.routing import Language
 from kotha.rag.citations import CITATION
+from kotha.text.lexicon import BENGALI_BLOCK
 from kotha.text.normalize import BANGLA_DIGITS
 from kotha.text.number_words import BANGLA_0_TO_99
 
@@ -71,16 +72,24 @@ BANGLA_LOANWORDS = {
     "ticket": "টিকিট",
 }
 ENGLISH_ACRONYMS_SAID_AS_WORDS = frozenset({"sim", "pin", "nodi", "kotha"})
-ENGLISH_FOR_BANGLA_NAMES = {"নদী": "Nodi", "কথা": "Kotha"}
-COUNT_SUFFIX = "টা|টি|টে|টো"
+ENGLISH_FOR_BANGLA_NAMES = {"নদী": "nodi", "কথা": "kotha"}
+# the voices' vocab.json (ADR 0009) without digits, punctuation and the Bangla blank token "6"
+VOICE_CHARACTERS = {
+    "bn": frozenset(" ঁংঃঅআইঈউঊঋএঐওঔকখগঘঙচছজঝঞটঠডঢণতথদধনপফবভমযরলশষসহ়ািীুূৃেৈোৌ্ৎ"),
+    "en": frozenset(" 'abcdefghijklmnopqrstuvwxyz"),
+}
 UNIT_AFTER_NUMBER = re.compile(
-    rf"\s*(?:(?:gb|mb|kb|days?|hours?|minutes?|mins?|months?|weeks?|years?|sms|%)(?![a-z])"
-    rf"|(?:দিন|ঘণ্টা|মিনিট|মাস|সপ্তাহ|বছর|টাকা|জিবি|এমবি)|(?<=\d)(?:{COUNT_SUFFIX}))",
+    r"\s*(?:(?:gb|mb|kb|days?|hours?|minutes?|mins?|months?|weeks?|years?|sms|%)(?![a-z])"
+    r"|দিন|ঘণ্টা|মিনিট|মাস|সপ্তাহ|বছর|জিবি|এমবি|এসএমএস|টা|টি|টে|টো)",
     re.IGNORECASE,
 )
 PERCENT = re.compile("%")
 DATA_UNIT_AFTER_NUMBER = re.compile(r"\s*(gb|mb|kb)(?![a-z])", re.IGNORECASE)
-NUMBER = re.compile(r"(?<![\d.,])(\d{1,3}(?:,\d{2,3})+(?![\d,])|\d+)(?:\.(\d+))?(?!\d)")
+GROUPED_NUMBER = r"(?:\d{1,3}(?:,\d{3})+|\d{1,2}(?:,\d{2})+,\d{3})(?!,?\d)"
+NUMBER = re.compile(rf"(?<![\d.])({GROUPED_NUMBER}|\d+)(?:\.(\d+))?(?!\d)")
+CLOCK_TIME = re.compile(r"(?<![\d:])(\d{1,2}):(\d{2})(?![\d:])")
+DIGITS = re.compile(r"\d+")
+EMPHASIS = re.compile(r"\*{2,}|_{2,}")
 CODE = re.compile(r"(?<![*#\d])(?=[*#\d]*\d)[*#\d]*[*#][*#\d]*")
 HYPHEN_BEFORE_BANGLA_SUFFIX = re.compile(rf"(?<=[A-Za-z\d])-(?=[{BANGLA_LETTER}])")
 LATIN_WORD = re.compile(r"[A-Za-z]+")
@@ -116,7 +125,8 @@ def num_to_en_words(number: int) -> str:
         return ENGLISH_0_TO_19[number]
     if number < 100:
         tens, ones = divmod(number, 10)
-        return " ".join(filter(None, (ENGLISH_TENS[tens - 2], ones and ENGLISH_0_TO_19[ones])))
+        tens_word = ENGLISH_TENS[tens - 2]
+        return f"{tens_word} {ENGLISH_0_TO_19[ones]}" if ones else tens_word
     if number < 1_000:
         hundreds, rest = divmod(number, 100)
         head = f"{ENGLISH_0_TO_19[hundreds]} hundred"
@@ -168,6 +178,19 @@ def spoken_number(match: re.Match[str], text: str, lang: Language) -> tuple[str,
     return f" {words} ", after
 
 
+def spoken_time(match: re.Match[str], lang: Language) -> str:
+    hour, minute = int(match.group(1)), int(match.group(2))
+    if hour > 23 or minute > 59:
+        return match.group(0)
+    if lang == "bn":
+        minutes = f" {num_to_bn_words(minute)} মিনিট" if minute else ""
+        return f" {num_to_bn_words(hour)}টা{minutes} "
+    if minute == 0:
+        return f" {num_to_en_words(hour)} o'clock "
+    minutes = f"oh {num_to_en_words(minute)}" if minute < 10 else num_to_en_words(minute)
+    return f" {num_to_en_words(hour)} {minutes} "
+
+
 def spoken_numbers(text: str, lang: Language) -> str:
     pieces: list[str] = []
     position = 0
@@ -196,29 +219,41 @@ def spoken_latin_word(word: str, lang: Language) -> str:
     return word
 
 
+def without_accents(text: str) -> str:
+    return "".join(char if ord(char) in BENGALI_BLOCK else plain_character(char) for char in text)
+
+
+def plain_character(char: str) -> str:
+    decomposed = unicodedata.normalize("NFKD", char)
+    return "".join(part for part in decomposed if not unicodedata.combining(part))
+
+
 def speakable(sentence: str, lang: Language) -> str:
+    text = spoken_text(sentence, lang)
+    return " ".join(
+        "".join(char if char in VOICE_CHARACTERS[lang] else " " for char in text).split()
+    )
+
+
+def spoken_text(sentence: str, lang: Language) -> str:
     text = CITATION.sub(" ", sentence)
     text = "".join(char for char in text if unicodedata.category(char) != "Cf")
-    text = unicodedata.normalize("NFC", text).translate(BANGLA_DIGITS)
+    text = without_accents(unicodedata.normalize("NFC", text)).translate(BANGLA_DIGITS)
+    text = EMPHASIS.sub(" ", text)
     text = HYPHEN_BEFORE_BANGLA_SUFFIX.sub("", text)
     text = CODE.sub(lambda match: spoken_code(match.group(0), lang), text)
+    text = CLOCK_TIME.sub(lambda match: spoken_time(match, lang), text)
     text = spoken_numbers(text, lang)
+    text = DIGITS.sub(lambda match: f" {digit_by_digit(match.group(0), lang)} ", text)
     text = PERCENT.sub(f" {SYMBOL_WORDS[lang]['%']} ", text)
     text = LATIN_WORD.sub(lambda match: spoken_latin_word(match.group(0), lang), text)
     if lang == "en":
         text = BANGLA_WORD.sub(lambda match: english_name(match.group(0)), text).lower()
-    return unicodedata.normalize("NFC", " ".join(without_punctuation(text, lang).split()))
+    return unicodedata.normalize("NFC", text)
 
 
 def english_name(bangla_word: str) -> str:
     return ENGLISH_FOR_BANGLA_NAMES.get(bangla_word, bangla_word)
-
-
-def without_punctuation(text: str, lang: Language) -> str:
-    kept = "'" if lang == "en" else ""
-    return "".join(
-        " " if unicodedata.category(char)[0] in "PS" and char not in kept else char for char in text
-    )
 
 
 def split_sentences(text: str) -> list[str]:

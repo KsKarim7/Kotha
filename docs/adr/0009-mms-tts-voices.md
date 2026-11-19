@@ -80,8 +80,15 @@ allowed and goes on the listening sheet.
 grouping commas or a decimal point, and a number followed by a unit (GB, MB, days, দিন, ঘণ্টা, a
 count suffix such as টা) is read as a number. Any other run of three or more digits, and any run
 with a leading zero, is read digit by digit, because in this domain it is almost always a short
-code, an SMS number or a phone number (`747`, `7470`, `01700000009`). An unknown Latin word in a
-Bangla reply is spelled with letter names; a known one comes from a small loanword map.
+code, an SMS number or a phone number (`747`, `7470`, `01700000009`). The cost: a year (`2025`),
+a pack name such as `NV-100` and a bare table value such as `300` are also read digit by digit.
+Clock times (`10:00`, `৯:৩০`) are read as times. An unknown Latin word in a Bangla reply is spelled
+with letter names; a known one comes from a small loanword map. Accents are folded (`café` to
+`cafe`). The last step keeps only characters in the voice's vocabulary, so nothing reaches a voice
+that its tokenizer would drop. In an English reply this removes any Bangla word except the brand
+names, which is safe because the answer pipeline rejects an English reply that contains Bengali
+letters (`in_language`). Ranges (`5-10`), signs (`-5`) and fractions (`1/2`) lose their symbol;
+none occurs in the knowledge base.
 
 The status stays "proposed" until the listening sheet (M7-3) is rated and RTF comes from a
 committed run.
