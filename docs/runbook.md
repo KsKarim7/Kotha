@@ -356,9 +356,13 @@ cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
 `eval/latency.py` measures warm calls end to end. It speaks every question of
 `data/testsets/rag_test.csv` with the MMS voices (synthetic input: the TTS voice, not a person),
 cuts each clip at its last audible sample, and streams it to the app in real time as 20 ms frames,
-followed by silence, one call per question. It prints p50 and p95 per stage, the number of turns,
-the turns the VAD split before the clip ended (left out of the percentiles) and the reply kinds,
-and writes one row per turn to `--output`, which must be outside the repository.
+followed by silence, one call per question. One extra turn runs first and is not counted, because
+the first turn of a process pays for the LLM client's first connection. The percentiles count only
+turns that got an answer (`kind` `answer`), were not split and did not fail: a cached fixed reply
+(handoff, "please repeat", account) has no LLM call and near-zero TTS time, so mixing it in would
+hide the answer path. The script prints the counted turns, the split turns, the reply kinds and the
+failures (timeout, connection closed, no audio), and writes one row per turn to `--output`, which
+must be outside the repository. A failed turn is recorded and the run goes on.
 
 ```bash
 cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
@@ -375,7 +379,12 @@ cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
     stream tokens. `tts_first_audio` is from the reply text to its first synthesised sentence; a
     cached fixed reply makes it close to zero.
   - `ttfa`: true end of speech to the first byte of bot audio at the client (the blueprint's TTFA,
-    measured from the true end of speech). `ttfa_from_vad` is the same from the `speech_end` event.
+    measured from the true end of speech). On localhost, receiving is effectively the same moment
+    as the server sending. `ttfa_from_vad` is the same from the `speech_end` event.
+  - The true end of speech is the end of the last 20 ms frame of the clip on the paced timeline,
+    after the clip was cut at its last sample above 1% of its peak.
+- `--launch` refuses a port that is already in use, stops waiting if the app exits during
+  startup, and kills the app if it does not exit within 60 s at the end.
 - A number counts for `EVALUATION.md` only from a run with `git_dirty` false. Timings on cuda count
   only after the GPU check in this runbook passed in the same session; `KOTHA_ASR_DEVICE` defaults
   to `cpu`.

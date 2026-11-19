@@ -62,13 +62,27 @@ def test_warm_up_runs_one_search_and_never_calls_the_llm() -> None:
     assert llm.calls == []
 
 
-def test_replies_carry_the_time_spent_in_retrieval_and_the_llm() -> None:
+def fake_clock(monkeypatch: pytest.MonkeyPatch, readings: list[float]) -> None:
+    ticks = iter(readings)
+    monkeypatch.setattr("kotha.dialogue.answer.time.perf_counter", lambda: next(ticks))
+
+
+def test_llm_time_is_summed_over_a_regeneration(monkeypatch: pytest.MonkeyPatch) -> None:
     pipeline, llm, _ = pipeline_for(["no citation here", "still none"])
+    fake_clock(monkeypatch, [0.0, 0.25, 1.0, 3.0, 4.0, 4.5])
     reply = pipeline.reply("How do I replace my SIM card?")
     assert reply.handoff_reason == HandoffReason.REJECTED_TWICE
     assert len(llm.calls) == 2
-    assert set(reply.stage_seconds) == {"retrieval", "llm"}
-    assert all(seconds >= 0 for seconds in reply.stage_seconds.values())
+    assert reply.stage_seconds == {"retrieval": 0.25, "llm": 2.5}
+
+
+def test_a_failed_retrieval_still_records_its_time(monkeypatch: pytest.MonkeyPatch) -> None:
+    pipeline, llm, _ = pipeline_for([], RuntimeError("embedding failed"))
+    fake_clock(monkeypatch, [0.0, 0.75])
+    reply = pipeline.reply("How do I replace my SIM card?")
+    assert reply.handoff_reason == HandoffReason.RETRIEVAL_FAILED
+    assert reply.stage_seconds == {"retrieval": 0.75}
+    assert llm.calls == []
 
 
 def test_an_account_request_spends_no_time_in_retrieval_or_the_llm() -> None:
