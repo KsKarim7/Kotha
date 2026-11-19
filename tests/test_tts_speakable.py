@@ -7,11 +7,13 @@ import pytest
 from kotha.dialogue.routing import Language
 from kotha.text.number_words import BANGLA_0_TO_99
 from kotha.tts.speakable import (
+    VOICE_CHARACTERS,
     num_to_bn_words,
     num_to_en_words,
     speakable,
     speakable_sentences,
     split_sentences,
+    spoken_text,
 )
 
 KB_DIR = Path(__file__).resolve().parent.parent / "data" / "kb"
@@ -205,6 +207,77 @@ def test_stars_and_hashes_are_spoken_only_inside_a_code_with_digits(
     assert speakable(sentence, "en") == spoken
 
 
+@pytest.mark.parametrize(
+    ("sentence", "lang", "spoken"),
+    [
+        ("Open 10:00 to 18:00.", "en", "open ten o'clock to eighteen o'clock"),
+        ("From 9:05 or 9:30.", "en", "from nine oh five or nine thirty"),
+        ("সকাল ১০:০০ থেকে ১০:৩০", "bn", "সকাল দশটা থেকে দশটা ত্রিশ মিনিট"),
+        ("Score 25:70.", "en", "score twenty five seventy"),
+    ],
+)
+def test_clock_times_are_read_as_times(sentence: str, lang: Language, spoken: str) -> None:
+    assert speakable(sentence, lang) == nfc(spoken)
+
+
+@pytest.mark.parametrize(
+    ("sentence", "lang", "spoken"),
+    [
+        ("**৩০ দিন** চলবে", "bn", "ত্রিশ দিন চলবে"),
+        ("A **30 GB** pack.", "en", "a thirty gigabytes pack"),
+        ("__7 days__ left", "en", "seven days left"),
+    ],
+)
+def test_markdown_emphasis_around_numbers_is_not_a_code(
+    sentence: str, lang: Language, spoken: str
+) -> None:
+    assert speakable(sentence, lang) == nfc(spoken)
+
+
+@pytest.mark.parametrize(
+    ("sentence", "spoken"),
+    [
+        ("5,10,15 days", "five ten fifteen days"),
+        ("items 5,10", "items five ten"),
+        ("1,000,000 SMS", "one million ess em ess"),
+        ("1,00,000 minutes", "one hundred thousand minutes"),
+        ("1,0000", "one zero zero zero zero"),
+        (".5 and 1.2.3", "five and one point two three"),
+    ],
+)
+def test_only_strict_grouping_makes_one_number_and_no_digit_is_left(
+    sentence: str, spoken: str
+) -> None:
+    assert speakable(sentence, "en") == spoken
+
+
+@pytest.mark.parametrize(
+    ("sentence", "spoken"),
+    [
+        ("৩০,৬০ বা ৯০ দিন", "ত্রিশ ষাট বা নব্বই দিন"),
+        ("১০০ টি প্যাক", "একশো টি প্যাক"),
+        ("১০০০ এসএমএস", "এক হাজার এসএমএস"),
+    ],
+)
+def test_bangla_lists_and_spaced_counts(sentence: str, spoken: str) -> None:
+    assert speakable(sentence, "bn") == nfc(spoken)
+
+
+@pytest.mark.parametrize(
+    ("sentence", "lang", "spoken"),
+    [
+        ("A café visit.", "en", "a cafe visit"),
+        ("café", "bn", "সি এ এফ ই"),
+        ("Pay ৩০ দিন later.", "en", "pay thirty later"),
+        ("１２ GB", "en", "twelve gigabytes"),
+    ],
+)
+def test_accents_fullwidth_digits_and_bangla_in_english(
+    sentence: str, lang: Language, spoken: str
+) -> None:
+    assert speakable(sentence, lang) == nfc(spoken)
+
+
 def test_empty_and_punctuation_only_text_is_empty() -> None:
     assert speakable("", "bn") == ""
     assert speakable(" ।?! ", "en") == ""
@@ -237,16 +310,30 @@ def test_speakable_sentences_drops_empty_sentences() -> None:
     ("lang", "allowed"),
     [("bn", BANGLA_VOICE_CHARACTERS), ("en", ENGLISH_VOICE_CHARACTERS)],
 )
-def test_every_knowledge_base_sentence_becomes_text_inside_the_voice_vocabulary(
+def test_knowledge_base_sentences_lose_only_punctuation_to_the_vocabulary_filter(
     lang: Language, allowed: frozenset[str]
 ) -> None:
+    assert VOICE_CHARACTERS[lang] == allowed
     files = sorted(KB_DIR.glob(f"*.{lang}.md"))
     assert files
-    outside = {
+    lost = {
         char
         for path in files
-        for sentence in speakable_sentences(path.read_text(encoding="utf-8"), lang)
-        for char in sentence
-        if char not in allowed
+        for sentence in split_sentences(path.read_text(encoding="utf-8"))
+        for char in spoken_text(sentence, lang)
+        if char not in allowed and unicodedata.category(char)[0] not in "PSZ"
     }
-    assert outside == set()
+    assert lost == set()
+
+
+@pytest.mark.parametrize("lang", ["bn", "en"])
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        ".5 1.2.3 1,0000 1,000,0 1,2 GB 5-10 -5 1/2 1st",
+        "café naïve Ω İ ǅ ঌ ৠ ৗ ৱ ঽ ١٢٣ ３４ ½ 🙂 $ ₹ @ &",
+        "Visit nodi.com.bd, e.g. today; ২০২৫ সালে ৳100 Tk 100",
+    ],
+)
+def test_odd_input_never_leaves_the_voice_vocabulary(sentence: str, lang: Language) -> None:
+    assert set(speakable(sentence, lang)) <= VOICE_CHARACTERS[lang]
