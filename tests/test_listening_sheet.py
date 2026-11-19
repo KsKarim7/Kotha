@@ -77,16 +77,21 @@ def test_malformed_sentence_files_are_refused(tmp_path: Path, content: str, mess
 
 
 @pytest.mark.parametrize(
-    ("output_dir", "key"),
+    ("output_name", "key_name"),
     [
-        (REPO_ROOT / "eval" / "listening-out", Path("/tmp/listening-key.csv")),
-        (Path("/tmp/listening-out"), REPO_ROOT / "eval" / "key.csv"),
-        (Path("/tmp/listening-out"), Path("/tmp/listening-out/key.csv")),
+        ("<repo>/eval/listening-out", "key.csv"),
+        ("clips", "<repo>/eval/key.csv"),
+        ("clips", "clips/key.csv"),
     ],
 )
 def test_main_refuses_a_key_or_output_in_the_repository_or_a_key_beside_the_clips(
-    monkeypatch: pytest.MonkeyPatch, output_dir: Path, key: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, output_name: str, key_name: str
 ) -> None:
+    def resolved(name: str) -> Path:
+        repo_relative = name.removeprefix("<repo>/")
+        return REPO_ROOT / repo_relative if repo_relative != name else tmp_path / name
+
+    output_dir, key = resolved(output_name), resolved(key_name)
     argv = ["listening_sheet.py", "--output-dir", str(output_dir), "--key", str(key)]
     monkeypatch.setattr("sys.argv", argv)
     with pytest.raises(SystemExit) as raised:

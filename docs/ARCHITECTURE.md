@@ -156,6 +156,6 @@ text a voice receives must contain only characters it knows.
   worker-thread call (`asyncio.to_thread`) per sentence, never on the event loop, so the first
   sentence can play before the rest is ready, and a cancelled reply stops after the sentence in
   progress. `load_tts_service` blocks for about 15 s while it loads both voices and warms the
-  cache, so the app calls it in a worker thread at startup. The greeting and the fixed replies (handoff, "please repeat", "not
-  available yet") are synthesised once at start and served from a read-only cache; answers are
-  not cached. `to_telephony_rate` resamples to 8 kHz for the phone path.
+  cache, so the app must call it in a worker thread at startup. The greeting and the fixed
+  replies (handoff, "please repeat", "not available yet") are synthesised once at start and
+  served from a read-only cache; answers are not cached. `to_telephony_rate` resamples to 8 kHz for the phone path.
