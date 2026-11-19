@@ -242,7 +242,7 @@ cd ~/kotha && set -a && . ./.env && set +a && uv run python -m kotha.kb.ingest
 
 Replies are spoken by `facebook/mms-tts-ben` (Bangla) and `facebook/mms-tts-eng` (English), both
 VITS models licensed CC-BY-NC 4.0 (non-commercial only), pinned in ADR 0009. Download them once
-(about 280 MB, `model.safetensors` and the small JSON files only):
+(about 277 MiB, `model.safetensors` and the small JSON files only):
 
 ```bash
 cd ~/kotha && uv run python -c 'from huggingface_hub import snapshot_download; snapshot_download("facebook/mms-tts-ben", revision="0da99de6074c8829121cdabfbdba423af18e8e56", allow_patterns=["*.json", "model.safetensors"]); snapshot_download("facebook/mms-tts-eng", revision="c71de0fe7204c83f1c10820a7d696d0b450048ba", allow_patterns=["*.json", "model.safetensors"])'
@@ -252,15 +252,20 @@ cd ~/kotha && uv run python -c 'from huggingface_hub import snapshot_download; s
 prints, per sentence, the audio length, the synthesis time, the RTF, the text the tokenizer keeps
 and every character it drops. It writes one WAV per sentence to `--output-dir`, which must be
 outside the repository. `--asr-model` transcribes each clip back with faster-whisper as a rough
-hint of what the audio sounds like; it is not a pronunciation score.
+hint of what the audio sounds like; it is not a pronunciation score. One model transcribes every
+clip, so run it twice: the Bangla fine-tune for the bn clips and multilingual `medium` for the en
+clips (see "Bangla Whisper models" for the local model):
 
 ```bash
 cd ~/kotha && HF_HUB_OFFLINE=1 uv run python eval/tts_probe.py \
   --output-dir ~/kotha-runs/tts-probe --asr-model models/bn-tugstugi-medium-ct2
+cd ~/kotha && HF_HUB_OFFLINE=1 uv run python eval/tts_probe.py \
+  --output-dir ~/kotha-runs/tts-probe --asr-model medium
 ```
 
 - The tokenizer drops every character outside the voice's `vocab.json` without a warning, so a
-  `dropped:` line means that character is never spoken.
+  `dropped:` line means that character is never spoken. The blank token, `6` for Bangla and `k`
+  for English, is listed as dropped too: the tokenizer gives it the blank's id (ADR 0009).
 - The timings are from one run on whatever the CPU is doing at the time; they are not results for
   `EVALUATION.md`.
 

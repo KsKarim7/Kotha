@@ -55,9 +55,9 @@ class ProbeResult:
     heard: str | None
 
 
-def dropped_characters(text: str, vocab: Collection[str]) -> tuple[str, ...]:
+def dropped_characters(text: str, vocab: Collection[str], blank: str) -> tuple[str, ...]:
     lowered = text.lower()
-    return tuple(sorted({char for char in lowered if char not in vocab}))
+    return tuple(sorted({char for char in lowered if char not in vocab or char == blank}))
 
 
 def character_label(char: str) -> str:
@@ -67,11 +67,9 @@ def character_label(char: str) -> str:
 class MmsVoice:
     def __init__(self, lang: str) -> None:
         os.environ["DISABLE_SAFETENSORS_CONVERSION"] = "true"
-        import torch
         from transformers import AutoTokenizer, VitsModel
 
         model_id, revision = VOICES[lang]
-        self._torch = torch
         self.tokenizer = AutoTokenizer.from_pretrained(
             model_id, revision=revision, local_files_only=True
         )
@@ -80,9 +78,11 @@ class MmsVoice:
         self.sampling_rate: int = self.model.config.sampling_rate
 
     def synthesize(self, text: str) -> np.ndarray:
+        import torch
+
         inputs = self.tokenizer(text, return_tensors="pt")
-        self._torch.manual_seed(SEED)
-        with self._torch.inference_mode():
+        torch.manual_seed(SEED)
+        with torch.inference_mode():
             waveform = self.model(**inputs).waveform
         return waveform[0].numpy().astype(np.float32)
 
@@ -99,7 +99,9 @@ def probe(
     return ProbeResult(
         sentence=sentence,
         spoken_text=spoken_text,
-        dropped=dropped_characters(sentence.text, voice.tokenizer.get_vocab()),
+        dropped=dropped_characters(
+            sentence.text, voice.tokenizer.get_vocab(), voice.tokenizer.pad_token
+        ),
         audio_s=len(audio) / voice.sampling_rate,
         synthesis_s=synthesis_s,
         heard=heard,
@@ -107,10 +109,10 @@ def probe(
 
 
 def print_result(result: ProbeResult) -> None:
-    rtf = result.synthesis_s / result.audio_s
+    rtf = f"{result.synthesis_s / result.audio_s:.3f}" if result.audio_s else "n/a"
     print(
         f"{result.sentence.id}: audio {result.audio_s:.2f} s, synthesis "
-        f"{result.synthesis_s:.3f} s, RTF {rtf:.3f}"
+        f"{result.synthesis_s:.3f} s, RTF {rtf}"
     )
     print(f"  input:  {result.sentence.text}")
     print(f"  spoken: {result.spoken_text}")
