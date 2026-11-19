@@ -56,6 +56,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Warm-up and readiness: the app loads and warms every model before it accepts connections (`kotha.api.app.warm_up`: Silero, Whisper on synthesised speech, one retrieval search through `AnswerPipeline.warm_up`, the voices through the cached prompts, the Gemini client without an API call), and `GET /v1/ready` returns the status with `startup_seconds`.
 - A browser client served at `/`: a consent box, Start and End, a microphone with echo cancellation, an AudioWorklet that sends 20 ms frames of 16 kHz PCM16, playback of the bot's audio, and a transcript panel with the caller's text and each reply with its cited document titles; it waits for `/v1/ready` and loads nothing from another origin.
 - A latency harness, `eval/latency.py`: it speaks the `rag_test` questions with the MMS voices, streams them to the app in real time, and reports p50 and p95 for `vad`, `asr`, `retrieval`, `llm`, `tts_first_audio` and TTFA (from the true end of speech and from the VAD decision), with cold start reported once and separately, and optional MLflow logging. The server sends a `timing` event per turn, and `BotReply.stage_seconds` carries the retrieval and LLM time.
+- The first latency results in `EVALUATION.md`: p50 and p95 per stage and TTFA for 56 warm, answered turns of synthetic spoken questions on the CPU, with cold start reported separately, from one committed run of `eval/latency.py`.
 
 ### Changed
 
