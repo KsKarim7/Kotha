@@ -160,3 +160,6 @@ Questions about code I haven't understood yet. Answer each one in my own words o
 | `services/api/kotha/tts/service.py` | `TtsService.speak`, `warm_fixed_prompts` | Why does synthesis run in a worker thread, why are only fixed prompts cached and made read-only, and why is audio returned per sentence? | |
 | `services/api/kotha/tts/mms.py` | `MmsVoice.synthesize`, `SYNTHESIS_LOCK` | Why must one lock cover every voice when the seed is global to torch? | |
 | `eval/listening_sheet.py` | `clip_plan`, `write_key` | Why is a listening test blind, and why are the before and after clips shuffled with a fixed seed? | |
+| `services/api/kotha/api/session.py` | `CallSession.run`, `CallEnded` | Why does one task group per call make shutdown simple, why is there exactly one task that writes to the socket, and why anyio rather than `asyncio.TaskGroup` under Starlette? | |
+| `services/api/kotha/api/session.py` | `unusable_reason`, `CallSession._detect` | Why must only confirmed speech reach Whisper, and why is a looping decode answered with "please repeat" instead of being passed to the LLM? | |
+| `services/api/kotha/logs.py` | `log_event`, `TOKEN` | How does an allow-list of field names and token-shaped values keep transcripts and phone numbers out of logs, and what can it still not catch? | |
