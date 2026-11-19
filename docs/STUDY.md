@@ -170,3 +170,10 @@ Questions about code I haven't understood yet. Answer each one in my own words o
 | `eval/latency.py` | `measure_turn`, `turn_stages`, `without_trailing_silence` | What is TTFA measured from, why does a synthetic clip need its trailing silence cut, why are split turns left out, and why is cold start never mixed into warm-call percentiles? | |
 | `services/api/kotha/dialogue/answer.py` | `AnswerPipeline._search`, `_generate`, `stage_seconds` | How can a pipeline report its own stage times without changing every return path? | |
 | `Dockerfile`, `docker-compose.yml` | the `app` service | Why are dependencies installed in a layer before the code is copied, why do model weights come from read-only mounts instead of the image, and why does the health check use the readiness endpoint? | |
+| `eval/tracking.py` | `git_tags`, `log_run` | Why does every logged run carry its commit and a `git_dirty` flag, and why is MLflow stored outside the repository? | |
+| `eval/error_analysis.py` | `substitution_counts`, `Substitution` | What does a ranked list of substituted word pairs show about ASR errors that a single WER number hides? | |
+| `services/api/kotha/kb/documents.py` | `read_document`, `split_front_matter` | Why does the reader refuse a knowledge-base file that breaks the format instead of loading what it can? | |
+| `services/api/kotha/dialogue/scenarios.py` | `read_scenarios`, `turn_failures` | How do scripted conversations test the pipeline end to end, and why do they check the reply kind, language and cited document rather than the exact text? | |
+| `services/api/kotha/dialogue/chat.py` | `live_pipeline` | Why is the live pipeline a context manager, and what does it open and close? | |
+| `services/api/kotha/llm/fake.py` | `FakeLLMClient` | Why do tests use a scripted fake LLM instead of mocking the Gemini SDK? | |
+| `services/api/kotha/api/protocol.py` | `CLIENT_MESSAGE`, `BotText`, `Timing` | Why are the WebSocket messages Pydantic models, and what does a discriminated union do when a client sends an unknown message type? | |
