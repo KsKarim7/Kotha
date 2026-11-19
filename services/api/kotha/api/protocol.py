@@ -75,9 +75,19 @@ class ReplyAudioEnd(BaseModel):
     type: Literal["reply_audio_end"] = "reply_audio_end"
 
 
+class Timing(BaseModel):
+    type: Literal["timing"] = "timing"
+    asr_seconds: float | None = None
+    retrieval_seconds: float | None = None
+    llm_seconds: float | None = None
+    tts_first_audio_seconds: float | None = None
+
+
 class ErrorEvent(BaseModel):
     type: Literal["error"] = "error"
     code: ErrorCode
 
 
-ServerEvent = Ready | Vad | TranscriptEvent | BotText | Handoff | ReplyAudioEnd | ErrorEvent
+ServerEvent = (
+    Ready | Vad | TranscriptEvent | BotText | Handoff | ReplyAudioEnd | Timing | ErrorEvent
+)
