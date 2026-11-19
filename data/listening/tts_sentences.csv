@@ -4,18 +4,18 @@ bn-02,bn,data-size,রাতের প্যাক NT-NIGHT-5GB রাত ১২
 bn-03,bn,data-size,রাতের প্যাকে ৭ দিনের জন্য ৫ GB ডেটা থাকে।
 bn-04,bn,data-size,NT-15GB প্যাকে ১৫ GB ডেটা পাবেন।
 bn-05,bn,duration,হেল্পলাইন বছরের প্রতিদিন ২৪ ঘণ্টা খোলা থাকে।
-bn-06,bn,time,সেবাকেন্দ্র সকাল ১০:০০ থেকে সন্ধ্যা ৬টা পর্যন্ত খোলা।
-bn-07,bn,code,প্যাকের তালিকা দেখতে *747# ডায়াল করুন।
+bn-06,bn,time,সার্ভিস সেন্টার সকাল ১০:০০ থেকে সন্ধ্যা ৬টা পর্যন্ত খোলা।
+bn-07,bn,code,প্যাক কিনতে বা বন্ধ করতে *747*4# ডায়াল করুন।
 bn-08,bn,code,ব্যালেন্স দেখতে *747*1# ডায়াল করুন।
 bn-09,bn,code,BAL লিখে 7470 নম্বরে SMS পাঠান।
 bn-10,bn,phone,অন্য ফোন থেকে 01700000009 নম্বরে কল করুন।
 bn-11,bn,english-term,SIM বদলাতে আপনার NID কার্ড সঙ্গে আনুন।
 bn-12,bn,english-term,Nodi Telecom app থেকে প্যাক কেনা যায়।
-bn-13,bn,english-term,আপনার PIN বা OTP কাউকে বলবেন না।
-bn-14,bn,english-term,AUTO ON লিখে পাঠালে প্যাক নিজে থেকে নবায়ন হবে।
+bn-13,bn,english-term,ওয়ালেটের PIN বা ওয়ান-টাইম কোড কাউকে দেবেন না।
+bn-14,bn,english-term,AUTO ON NT-30GB লিখে 7470 নম্বরে পাঠালে প্যাক নিজে থেকে নবায়ন হবে।
 en-01,en,data-size,The NT-30GB pack gives you 30 GB of data for 30 days.
 en-02,en,data-size,The night pack gives you 5 GB of data for 7 days.
 en-03,en,time,Service centres are open from 10:00 to 18:00.
 en-04,en,code,Dial *747*1# to check your balance.
 en-05,en,code,Send BAL to 7470 by SMS.
-en-06,en,english-term,Never share your PIN or OTP with anyone.
+en-06,en,english-term,Never give anyone your wallet PIN or a one-time code.

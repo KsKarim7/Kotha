@@ -1,6 +1,7 @@
 import asyncio
 import os
 import threading
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import pytest
@@ -83,8 +84,9 @@ def test_warmed_prompts_are_served_from_the_cache_without_synthesis() -> None:
     synthesised = len(bangla.texts) + len(english.texts)
     handoff = FIXED_REPLIES[ReplyKind.HANDOFF]["bn"]
     first = service.synthesize(handoff, "bn")
-    second = asyncio.run(service.speak(handoff, "bn"))
-    assert first is second
+    spoken = asyncio.run(spoken_audio(service, handoff, "bn"))
+    assert len(spoken) == len(first)
+    assert all(a is b for a, b in zip(spoken, first, strict=True))
     assert len(bangla.texts) + len(english.texts) == synthesised
     with pytest.raises(ValueError, match="read-only"):
         first[0][0] = 1.0
@@ -98,16 +100,44 @@ def test_answers_are_not_cached() -> None:
     assert len(voice.texts) == 2
 
 
+async def spoken_audio(service: TtsService, text: str, lang: Language) -> list[np.ndarray]:
+    return [audio async for audio in service.speak(text, lang)]
+
+
 def test_speak_synthesises_off_the_event_loop() -> None:
     voice = FakeVoice()
     service = TtsService({"en": voice})
 
     async def speak_on_loop() -> str:
-        await service.speak("Hello there.", "en")
+        await spoken_audio(service, "Hello there. Bye now.", "en")
         return threading.current_thread().name
 
     loop_thread = asyncio.run(speak_on_loop())
-    assert voice.threads and voice.threads[0] != loop_thread
+    assert len(voice.threads) == 2
+    assert loop_thread not in voice.threads
+
+
+def test_speak_yields_each_sentence_before_synthesising_the_next() -> None:
+    voice = FakeVoice()
+    service = TtsService({"en": voice})
+
+    async def first_sentence_then_stop() -> np.ndarray:
+        sentences = service.speak("One. Two. Three.", "en")
+        first = await anext(sentences)
+        assert voice.texts == ["one"]
+        await sentences.aclose()
+        return first
+
+    first = asyncio.run(first_sentence_then_stop())
+    assert len(first) == len("one") * 10
+    assert voice.texts == ["one"]
+
+
+def test_speak_gives_the_same_audio_as_synthesize() -> None:
+    service = TtsService({"bn": FakeVoice()})
+    text = "৩০ দিন চলবে। *747# ডায়াল করুন।"
+    spoken = asyncio.run(spoken_audio(service, text, "bn"))
+    assert [len(a) for a in spoken] == [len(a) for a in service.synthesize(text, "bn")]
 
 
 def test_telephony_rate_halves_the_samples() -> None:
@@ -150,3 +180,19 @@ def test_the_real_voices_give_the_same_16_khz_audio_twice() -> None:
         assert first[0].dtype == np.float32
         assert np.array_equal(first[0], second[0])
         assert 0.5 < len(first[0]) / SAMPLE_RATE_HZ < 10
+
+
+@pytest.mark.skipif(not voices_are_cached, reason="the MMS voices are not in the local cache")
+def test_the_real_voices_give_the_same_audio_when_called_concurrently() -> None:
+    service = TtsService({lang: MmsVoice(lang) for lang in VOICES})
+    texts: list[tuple[str, Language]] = [
+        ("প্যাকের মেয়াদ ৩০ দিন।", "bn"),
+        ("The pack lasts 30 days.", "en"),
+        ("সিম বদলাতে কার্ড লাগবে।", "bn"),
+        ("Dial *747# now.", "en"),
+    ]
+    sequential = [service.synthesize(text, lang)[0] for text, lang in texts]
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        concurrent = list(pool.map(lambda item: service.synthesize(*item)[0], texts * 2))
+    for index, audio in enumerate(concurrent):
+        assert np.array_equal(audio, sequential[index % len(texts)])

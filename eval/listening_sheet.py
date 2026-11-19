@@ -3,6 +3,7 @@ import csv
 import random
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 import soundfile as sf
 
@@ -49,13 +50,15 @@ def read_sentences(path: Path) -> list[ListeningSentence]:
     return sentences
 
 
-def read_sentence(row: dict[str, str], location: str) -> ListeningSentence:
-    if row["lang"] not in VOICES:
-        raise ValueError(f"{location}: unknown lang {row['lang']!r}")
-    if not row["id"] or not row["text"].strip():
-        raise ValueError(f"{location}: id and text must not be empty")
-    lang: Language = "bn" if row["lang"] == "bn" else "en"
-    return ListeningSentence(row["id"], lang, row["category"], row["text"])
+def read_sentence(row: dict[str, str | None], location: str) -> ListeningSentence:
+    fields = {name: (row.get(name) or "").strip() for name in SENTENCE_COLUMNS}
+    if fields["lang"] not in VOICES:
+        raise ValueError(f"{location}: unknown lang {fields['lang']!r}")
+    empty = [name for name in ("id", "category", "text") if not fields[name]]
+    if empty:
+        raise ValueError(f"{location}: {', '.join(empty)} must not be empty")
+    lang = cast(Language, fields["lang"])
+    return ListeningSentence(fields["id"], lang, fields["category"], fields["text"])
 
 
 def voice_input(clip: Clip) -> str:
@@ -97,13 +100,23 @@ def main() -> None:
         description="Render the TTS listening test: each sentence before and after normalisation."
     )
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument(
+        "--key",
+        type=Path,
+        required=True,
+        help="CSV naming each clip's version, kept from listeners",
+    )
     parser.add_argument("--sentences", type=Path, default=SENTENCES_PATH)
     args = parser.parse_args()
     output_dir: Path = args.output_dir.resolve()
-    if output_dir.is_relative_to(REPO_ROOT):
-        parser.error(f"--output-dir {output_dir} must be outside the repository")
+    key_path: Path = args.key.resolve()
+    if output_dir.is_relative_to(REPO_ROOT) or key_path.is_relative_to(REPO_ROOT):
+        parser.error("--output-dir and --key must be outside the repository")
+    if key_path.is_relative_to(output_dir):
+        parser.error("--key must be outside --output-dir, which is shared with listeners")
     clips = clip_plan(read_sentences(args.sentences))
     output_dir.mkdir(parents=True, exist_ok=True)
+    key_path.parent.mkdir(parents=True, exist_ok=True)
 
     voices = {lang: MmsVoice(lang) for lang in VOICES}
     for clip in clips:
@@ -111,8 +124,8 @@ def main() -> None:
         audio = resample(voice.synthesize(voice_input(clip)), voice.sampling_rate, SAMPLE_RATE_HZ)
         sf.write(output_dir / f"{clip.id}.wav", audio, SAMPLE_RATE_HZ, subtype="PCM_16")
     write_rating_sheet(output_dir / "ratings.csv", clips)
-    write_key(output_dir / "key.csv", clips)
-    print(f"{len(clips)} clips, rating sheet and key written to {output_dir}")
+    write_key(key_path, clips)
+    print(f"{len(clips)} clips and the rating sheet written to {output_dir}, the key to {key_path}")
 
 
 if __name__ == "__main__":

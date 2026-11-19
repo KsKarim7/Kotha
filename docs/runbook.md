@@ -279,16 +279,17 @@ listener cannot tell the versions apart:
 
 ```bash
 cd ~/kotha && HF_HUB_OFFLINE=1 uv run python eval/listening_sheet.py \
-  --output-dir ~/kotha-runs/listening/v1
+  --output-dir ~/kotha-runs/listening/v2/clips --key ~/kotha-runs/listening/v2/key.csv
 ```
 
 - `ratings.csv` is the sheet for listeners: clip, language, the intended sentence and one empty
   column per listener. Each listener plays every clip and writes a score from 1 (cannot understand
   it) to 5 (clear and natural), judging whether the clip says the intended sentence, numbers and
   codes included.
-- `key.csv` maps each clip to its sentence, category, version and the exact text sent to the voice.
-  Keep it away from the listeners until they have finished.
-- `--output-dir` must be outside the repository. Scores go into `EVALUATION.md` only after three
+- `--key` writes the CSV that maps each clip to its sentence, category, version and the exact text
+  sent to the voice. It must be outside `--output-dir`, because that folder is what listeners get.
+  Whoever renders the clips has seen the key and should not be one of the three listeners.
+- Both paths must be outside the repository. Scores go into `EVALUATION.md` only after three
   listeners have rated every clip.
 
 ## Retrieval evaluation
