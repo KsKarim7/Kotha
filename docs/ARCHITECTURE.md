@@ -195,6 +195,13 @@ codes: `bad_control_message`, `not_started`, `already_started`, `consent_require
 `odd_length_frame`, `frame_too_large`, `too_many_bad_frames` (after 20 refused messages the call
 is closed), `tts_failed` (the text was sent but the audio stopped).
 
+**Readiness.** `GET /v1/ready` returns `{"status":"ready","startup_seconds":…}`. The app loads
+and warms every model in its lifespan before uvicorn accepts connections (`kotha.api.app.warm_up`:
+Silero, Whisper on synthesised speech, one retrieval search; the voices are warmed by the cached
+prompts; the Gemini client is constructed without an API call), so a client that polls this
+endpoint never reaches a cold model. Latency runs measure warm calls only and report cold start
+separately.
+
 ## Browser call: the call loop
 
 `kotha.api.session.CallSession` runs one anyio task group per call with three tasks:

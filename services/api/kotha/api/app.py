@@ -1,31 +1,63 @@
 import asyncio
 import os
+import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import ExitStack, asynccontextmanager
+from typing import Protocol
 
 import numpy as np
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, Request, WebSocket
 
-from kotha.api.session import CallServices, CallSession
-from kotha.logs import configure_logging
+from kotha.api.protocol import Readiness
+from kotha.api.session import CallServices, CallSession, Transcriber
+from kotha.dialogue.routing import Language
+from kotha.logs import configure_logging, log_event
 
 ServiceLoader = Callable[[ExitStack], CallServices]
+WARM_UP_SENTENCE = "প্যাকের মেয়াদ ত্রিশ দিন।"
+
+
+class WarmablePipeline(Protocol):
+    def warm_up(self) -> None: ...
+
+
+class SentenceSynthesizer(Protocol):
+    def synthesize(self, text: str, lang: Language) -> tuple[np.ndarray, ...]: ...
 
 
 def create_app(load_services: ServiceLoader) -> FastAPI:
+    # uvicorn accepts no connection until the lifespan yields, so a call never meets a cold model
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         with ExitStack() as resources:
+            started = time.perf_counter()
             app.state.services = await asyncio.to_thread(load_services, resources)
+            app.state.startup_seconds = round(time.perf_counter() - started, 3)
+            log_event("ready", seconds=app.state.startup_seconds)
             yield
 
     app = FastAPI(title="Kotha", lifespan=lifespan)
+
+    @app.get("/v1/ready")
+    async def ready(request: Request) -> Readiness:
+        return Readiness(startup_seconds=request.app.state.startup_seconds)
 
     @app.websocket("/v1/calls/stream")
     async def call(websocket: WebSocket) -> None:
         await CallSession(websocket, websocket.app.state.services).run()
 
     return app
+
+
+def warm_up(
+    new_vad: Callable[[], Callable[[np.ndarray], float]],
+    asr: Transcriber,
+    pipeline: WarmablePipeline,
+    tts: SentenceSynthesizer,
+) -> None:
+    new_vad()
+    asr.transcribe(np.concatenate(tts.synthesize(WARM_UP_SENTENCE, "bn")))
+    pipeline.warm_up()
 
 
 def new_silero_probability() -> Callable[[np.ndarray], float]:
@@ -46,9 +78,9 @@ def load_live_services(resources: ExitStack) -> CallServices:
         raise RuntimeError("DATABASE_URL and KOTHA_ASR_MODEL must be set (see docs/runbook.md)")
     asr = WhisperAsr(asr_model, device=os.environ.get("KOTHA_ASR_DEVICE", "cpu"))
     pipeline = resources.enter_context(live_pipeline(database_url))
-    return CallServices(
-        new_vad=new_silero_probability, asr=asr, pipeline=pipeline, tts=load_tts_service()
-    )
+    tts = load_tts_service()
+    warm_up(new_silero_probability, asr, pipeline, tts)
+    return CallServices(new_vad=new_silero_probability, asr=asr, pipeline=pipeline, tts=tts)
 
 
 app = create_app(load_live_services)

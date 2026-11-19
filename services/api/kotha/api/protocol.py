@@ -31,6 +31,11 @@ class Stop(BaseModel):
 CLIENT_MESSAGE = TypeAdapter(Annotated[Start | Stop, Field(discriminator="type")])
 
 
+class Readiness(BaseModel):
+    status: Literal["ready"] = "ready"
+    startup_seconds: float
+
+
 class Ready(BaseModel):
     type: Literal["ready"] = "ready"
     sample_rate: int = SAMPLE_RATE_HZ
