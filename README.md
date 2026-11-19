@@ -64,4 +64,4 @@ There are no results yet. Every number will come from a committed evaluation run
 
 The code is released under the MIT licence; see [LICENSE](LICENSE).
 
-Third-party models keep their own licences, and Kotha does not ship model weights. The planned Bangla text-to-speech model, `facebook/mms-tts-ben`, is licensed CC-BY-NC 4.0, which allows non-commercial use only.
+Third-party models keep their own licences, and Kotha does not ship model weights. The planned text-to-speech models, `facebook/mms-tts-ben` for Bangla and `facebook/mms-tts-eng` for English, are licensed CC-BY-NC 4.0, which allows non-commercial use only.

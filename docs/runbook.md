@@ -238,6 +238,32 @@ cd ~/kotha && set -a && . ./.env && set +a && uv run python -m kotha.kb.ingest
   3 GB of RAM.
 - The test that loads the real model is skipped when the model is not in the cache, as in CI.
 
+## Text-to-speech voices
+
+Replies are spoken by `facebook/mms-tts-ben` (Bangla) and `facebook/mms-tts-eng` (English), both
+VITS models licensed CC-BY-NC 4.0 (non-commercial only), pinned in ADR 0009. Download them once
+(about 280 MB, `model.safetensors` and the small JSON files only):
+
+```bash
+cd ~/kotha && uv run python -c 'from huggingface_hub import snapshot_download; snapshot_download("facebook/mms-tts-ben", revision="0da99de6074c8829121cdabfbdba423af18e8e56", allow_patterns=["*.json", "model.safetensors"]); snapshot_download("facebook/mms-tts-eng", revision="c71de0fe7204c83f1c10820a7d696d0b450048ba", allow_patterns=["*.json", "model.safetensors"])'
+```
+
+`eval/tts_probe.py` synthesises a fixed set of bn and en sentences with both voices at seed 0 and
+prints, per sentence, the audio length, the synthesis time, the RTF, the text the tokenizer keeps
+and every character it drops. It writes one WAV per sentence to `--output-dir`, which must be
+outside the repository. `--asr-model` transcribes each clip back with faster-whisper as a rough
+hint of what the audio sounds like; it is not a pronunciation score.
+
+```bash
+cd ~/kotha && HF_HUB_OFFLINE=1 uv run python eval/tts_probe.py \
+  --output-dir ~/kotha-runs/tts-probe --asr-model models/bn-tugstugi-medium-ct2
+```
+
+- The tokenizer drops every character outside the voice's `vocab.json` without a warning, so a
+  `dropped:` line means that character is never spoken.
+- The timings are from one run on whatever the CPU is doing at the time; they are not results for
+  `EVALUATION.md`.
+
 ## Retrieval evaluation
 
 `eval/retrieval.py` asks every question in `data/testsets/rag_test.csv` and scores four
