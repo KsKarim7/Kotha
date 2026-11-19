@@ -25,7 +25,7 @@ Results for Milestone 1. Every result in this report comes from a committed eval
 | 700 ms | [measure] | [measure] | [measure] |
 | 900 ms | [measure] | [measure] | [measure] |
 
-Needs: the recorded `asr_test` set with turn boundaries marked, and noise-only clips; then `eval/vad_turns.py` per hangover setting.
+Needs: the recorded `asr_test` set with turn boundaries marked, and noise-only clips; `eval/vad_turns.py` per hangover setting; and a scoring script that compares the detected turns with the marked boundaries.
 
 Interpretation: [to be written]
 

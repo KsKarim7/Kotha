@@ -6,13 +6,13 @@ A Bangla-English voice AI agent and call-analytics platform for Nodi Telecom, a 
 
 ## Status
 
-Milestone 1 (a browser call works) is complete: a caller speaks Bangla, English or a mix of both in the browser, and Kotha answers questions about Nodi Telecom's packs and policies by voice, citing the documents it used. It runs on one machine's CPU with Docker Compose. The phone path, account actions, barge-in and post-call analytics come in later milestones.
+Milestone 1 (a browser call works) is built, apart from the items under "Limits and next" that need people (a real microphone test in a browser, recordings, listeners). A call takes speech in Bangla, English or a mix of both, and Kotha answers questions about Nodi Telecom's packs and policies by voice, citing the documents it used. Calls were tested with synthetic speech streamed over the WebSocket. The speech and retrieval models run on one machine's CPU with Docker Compose; the LLM is Gemini, a remote API. The phone path, account actions, barge-in and post-call analytics come in later milestones.
 
 ## What works now
 
 - **Browser call.** A static page streams the microphone (with echo cancellation) to `/v1/calls/stream` as 16 kHz PCM16, plays the bot's audio back and shows the caller's transcript and each answer with the titles of its sources. The caller must tick a consent box first.
 - **Turn taking.** Silero VAD with a turn detector (hangover, pre-roll, a 30 s cap) decides when the caller has finished. Only confirmed speech reaches speech recognition.
-- **Speech recognition.** faster-whisper with a Bangla fine-tune, on the CPU. Transcripts that look like a decoding loop are refused; two failed turns in a row hand off to a human.
+- **Speech recognition.** faster-whisper with a Bangla fine-tune, on the CPU. Empty transcripts and transcripts that look like a decoding loop are refused; two failed turns in a row hand off to a human.
 - **Answers.** Hybrid retrieval (pgvector with bge-m3, plus BM25 with a loanword lexicon, fused by RRF) over 16 bilingual knowledge-base documents. Gemini writes a short answer in the caller's language. Code checks that every sentence cites a retrieved passage, that every number is in a cited passage, that no money amount appears, and that the bot never claims to have changed the caller's account. Account requests get a fixed "not available yet" reply before the LLM runs.
 - **Speech.** MMS-TTS voices for Bangla and English, fed only text they can say: numbers, codes and English terms are turned into words in code.
 - **Operations.** Models load and warm before the app accepts calls (`/v1/ready`), logs carry only allow-listed fields (never what anyone said), and `eval/` holds the scripts behind every reported number.
@@ -88,8 +88,8 @@ ASR word error rates, the VAD ablation and the TTS listening scores need the rec
 
 ## Limits and next
 
-- **Latency.** On this CPU the two largest measured stages are speech recognition (p50 5.261 s) and the first synthesised sentence (p50 4.496 s). Streaming LLM tokens with sentence-by-sentence TTS is planned for MS2 (blueprint).
-- **Speech recognition.** The live model is a Bangla fine-tune, so English questions come back in Bangla script; choosing the live model from measured WER is still open (M3-6).
+- **Latency.** The per-stage p50 and p95 are in [EVALUATION.md](EVALUATION.md#latency); the interpretation is still to be written. The blueprint plans streamed LLM tokens for MS2.
+- **Speech recognition.** The default live model is a Bangla fine-tune (`bn-tugstugi-medium-ct2`). How it handles English speech is not measured yet; choosing the live model from measured WER is still open (M3-6).
 - **Guardrails.** Account requests and account claims are caught by patterns in code; ADR 0008 lists phrasings they still miss and proposes a structural rule for MS2.
 - **Not yet built.** Account tools and the mock BSS, barge-in, the phone path through Asterisk, and post-call analytics.
 - **Not yet checked by people.** The browser page has not been tested with a real microphone in a browser, and nobody has rated the TTS listening sheet yet.
