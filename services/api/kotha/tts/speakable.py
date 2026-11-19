@@ -80,7 +80,8 @@ VOICE_CHARACTERS = {
 }
 UNIT_AFTER_NUMBER = re.compile(
     r"\s*(?:(?:gb|mb|kb|days?|hours?|minutes?|mins?|months?|weeks?|years?|sms|%)(?![a-z])"
-    r"|দিন|ঘণ্টা|মিনিট|মাস|সপ্তাহ|বছর|জিবি|এমবি|এসএমএস|টা|টি|টে|টো)",
+    r"|দিন|ঘণ্টা|মিনিট|মাস|সপ্তাহ|বছর|জিবি|এমবি|এসএমএস|(?<=\d)(?:টা|টি|টে|টো)"
+    r"|(?:টা|টি|টে|টো)(?:য়|র)?(?![ঀ-৿]))",
     re.IGNORECASE,
 )
 PERCENT = re.compile("%")
@@ -263,4 +264,4 @@ def split_sentences(text: str) -> list[str]:
 
 def speakable_sentences(text: str, lang: Language) -> list[str]:
     sentences = (speakable(sentence, lang) for sentence in split_sentences(text))
-    return [sentence for sentence in sentences if sentence]
+    return [sentence for sentence in sentences if any(char.isalpha() for char in sentence)]

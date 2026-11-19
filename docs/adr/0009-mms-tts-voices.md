@@ -87,7 +87,8 @@ with letter names; a known one comes from a small loanword map. Accents are fold
 `cafe`). The last step keeps only characters in the voice's vocabulary, so nothing reaches a voice
 that its tokenizer would drop. In an English reply this removes any Bangla word except the brand
 names, which is safe because the answer pipeline rejects an English reply that contains Bengali
-letters (`in_language`). Ranges (`5-10`), signs (`-5`) and fractions (`1/2`) lose their symbol;
+letters (`in_language`); any later source of English text, such as BSS replies in MS2, must keep
+the same rule. Ranges (`5-10`), signs (`-5`) and fractions (`1/2`) lose their symbol;
 none occurs in the knowledge base.
 
 The status stays "proposed" until the listening sheet (M7-3) is rated and RTF comes from a
