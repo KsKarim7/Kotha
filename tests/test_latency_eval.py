@@ -196,6 +196,27 @@ def test_a_server_that_is_not_there_is_a_connect_failure() -> None:
     assert not port_in_use(port)
 
 
+def test_a_refused_handshake_is_a_connect_failure() -> None:
+    async def run() -> TurnResult:
+        async def refuse(websocket: ServerConnection, request: object) -> object:
+            return websocket.respond(503, "warming up\n")
+
+        handler = scripted_server(speech_end_after=None)
+        async with serve(handler, "127.0.0.1", 0, process_request=refuse) as server:
+            port = server.sockets[0].getsockname()[1]
+            return await measure_turn(f"ws://127.0.0.1:{port}", QUESTION, CLIP)
+
+    assert asyncio.run(run()).failure == "connect_failed"
+
+
+def test_a_malformed_event_is_recorded_and_does_not_stop_the_run() -> None:
+    async def handle(websocket: ServerConnection) -> None:
+        await websocket.recv()
+        await websocket.send("this is not json")
+
+    assert measured(handle).failure == "bad_event"
+
+
 def test_only_answered_turns_are_counted() -> None:
     answered = TurnResult("a", "en", "answer", stages={"ttfa": 2.0})
     handoff = TurnResult("h", "en", "handoff", stages={"ttfa": 0.5})

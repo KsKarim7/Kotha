@@ -356,13 +356,17 @@ cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
 `eval/latency.py` measures warm calls end to end. It speaks every question of
 `data/testsets/rag_test.csv` with the MMS voices (synthetic input: the TTS voice, not a person),
 cuts each clip at its last audible sample, and streams it to the app in real time as 20 ms frames,
-followed by silence, one call per question. One extra turn runs first and is not counted, because
-the first turn of a process pays for the LLM client's first connection. The percentiles count only
-turns that got an answer (`kind` `answer`), were not split and did not fail: a cached fixed reply
-(handoff, "please repeat", account) has no LLM call and near-zero TTS time, so mixing it in would
-hide the answer path. The script prints the counted turns, the split turns, the reply kinds and the
-failures (timeout, connection closed, no audio), and writes one row per turn to `--output`, which
-must be outside the repository. A failed turn is recorded and the run goes on.
+followed by silence, one call per question. One extra turn (the first question) runs first and is
+not counted, because the first turn of a process may still pay first-use costs; its stages are
+printed so any cold effect is visible. The percentiles count only turns that got an answer (`kind`
+`answer`), were not split and did not fail. A fixed reply (handoff, "please repeat", account) is
+served from the TTS cache, so its `tts_first_audio` is near zero, and some of those turns never
+reach the LLM; mixing them in would hide the answer path. The cost: a slow LLM path that ends in a
+handoff (`no_answer`, `rejected_twice`, `llm_failed`) is left out too, which biases `llm` and
+`ttfa` low. The script prints the counted turns, the split turns, the reply kinds and the failures
+(timeout, connection closed, connect failed, bad event, no audio), warns when fewer than 30 turns
+are counted (the blueprint's minimum), and writes one row per turn to `--output`, which must be
+outside the repository. A failed turn is recorded and the run goes on.
 
 ```bash
 cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
