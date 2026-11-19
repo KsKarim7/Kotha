@@ -199,7 +199,8 @@ is closed), `tts_failed` (the text was sent but the audio stopped).
 and warms every model in its lifespan before uvicorn accepts connections (`kotha.api.app.warm_up`:
 Silero, Whisper on synthesised speech, one retrieval search; the voices are warmed by the cached
 prompts; the Gemini client is constructed without an API call), so a client that polls this
-endpoint never reaches a cold model. Latency runs measure warm calls only and report cold start
+endpoint never reaches a cold model. A failed load or warm-up stops startup (uvicorn exits), so
+the app never serves calls half-loaded. Latency runs measure warm calls only and report cold start
 separately.
 
 ## Browser call: the call loop

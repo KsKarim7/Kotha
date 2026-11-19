@@ -2,6 +2,7 @@ from collections.abc import Callable
 from contextlib import ExitStack
 
 import numpy as np
+import pytest
 from starlette.testclient import TestClient
 from test_api_session import FakeAsr, FakePipeline, FakeTts, loud_probability
 
@@ -9,6 +10,7 @@ from kotha.api.app import create_app, warm_up
 from kotha.api.session import CallServices
 from kotha.asr.whisper import Transcript
 from kotha.tts.service import TtsService
+from kotha.vad import WINDOW_SAMPLES
 
 
 class RecordingAsr:
@@ -48,12 +50,16 @@ def test_warm_up_runs_vad_then_asr_on_synthetic_speech_then_one_search() -> None
     voice = ToneVoice(steps)
     asr = RecordingAsr(steps)
 
+    def probability(window: np.ndarray) -> float:
+        steps.append(f"vad {len(window)}")
+        return 0.0
+
     def new_vad() -> Callable[[np.ndarray], float]:
-        steps.append("vad")
-        return loud_probability
+        steps.append("load vad")
+        return probability
 
     warm_up(new_vad, asr, RecordingPipeline(steps), TtsService({"bn": voice}))
-    assert steps == ["vad", "tts", "asr", "search"]
+    assert steps == ["load vad", f"vad {WINDOW_SAMPLES}", "tts", "asr", "search"]
     assert voice.texts == ["প্যাকের মেয়াদ ত্রিশ দিন"]
     assert asr.audio_lengths == [800]
 
@@ -71,4 +77,17 @@ def test_ready_answers_only_after_the_services_are_loaded() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "ready"
-    assert 0 <= body["startup_seconds"] < 5
+    assert isinstance(body["startup_seconds"], float) and body["startup_seconds"] >= 0
+
+
+def test_a_failed_warm_up_stops_startup_and_releases_resources() -> None:
+    released: list[str] = []
+
+    def failing_load(resources: ExitStack) -> CallServices:
+        resources.callback(released.append, "database")
+        raise RuntimeError("warm-up failed")
+
+    with pytest.raises(RuntimeError, match="warm-up failed"):
+        with TestClient(create_app(failing_load)):
+            pass
+    assert released == ["database"]

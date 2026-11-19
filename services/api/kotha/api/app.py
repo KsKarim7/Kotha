@@ -12,6 +12,8 @@ from kotha.api.protocol import Readiness
 from kotha.api.session import CallServices, CallSession, Transcriber
 from kotha.dialogue.routing import Language
 from kotha.logs import configure_logging, log_event
+from kotha.tts.service import SentenceAudio
+from kotha.vad import WINDOW_SAMPLES
 
 ServiceLoader = Callable[[ExitStack], CallServices]
 WARM_UP_SENTENCE = "প্যাকের মেয়াদ ত্রিশ দিন।"
@@ -22,7 +24,7 @@ class WarmablePipeline(Protocol):
 
 
 class SentenceSynthesizer(Protocol):
-    def synthesize(self, text: str, lang: Language) -> tuple[np.ndarray, ...]: ...
+    def synthesize(self, text: str, lang: Language) -> SentenceAudio: ...
 
 
 def create_app(load_services: ServiceLoader) -> FastAPI:
@@ -55,7 +57,7 @@ def warm_up(
     pipeline: WarmablePipeline,
     tts: SentenceSynthesizer,
 ) -> None:
-    new_vad()
+    new_vad()(np.zeros(WINDOW_SAMPLES, dtype=np.float32))
     asr.transcribe(np.concatenate(tts.synthesize(WARM_UP_SENTENCE, "bn")))
     pipeline.warm_up()
 
