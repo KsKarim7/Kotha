@@ -1,7 +1,12 @@
+import asyncio
+import json
+import socket
+from collections.abc import Awaitable, Callable
 from itertools import islice
 
 import numpy as np
 import pytest
+from websockets.asyncio.server import ServerConnection, serve
 
 from kotha.audio.convert import SAMPLE_RATE_HZ
 from latency import (
@@ -9,9 +14,13 @@ from latency import (
     LEAD_SILENCE_SECONDS,
     REPO_ROOT,
     STAGES,
+    Question,
     TurnResult,
+    counted,
     frame_clock,
     main,
+    measure_turn,
+    port_in_use,
     speech_frames,
     summarise,
     turn_stages,
@@ -94,3 +103,102 @@ def test_main_refuses_an_output_inside_the_repository(monkeypatch: pytest.Monkey
         main()
     assert raised.value.code == 2
     assert not output.exists()
+
+
+CLIP = np.full(SAMPLE_RATE_HZ // 5, 0.5, dtype=np.float32)
+CLIP_FRAMES = len(speech_frames(CLIP))
+TIMING = {
+    "type": "timing",
+    "asr_seconds": 0.4,
+    "retrieval_seconds": 0.1,
+    "llm_seconds": 0.9,
+    "tts_first_audio_seconds": 0.3,
+}
+QUESTION = Question("q1", "en", "sim-replacement", "How do I replace my SIM?")
+
+
+def scripted_server(
+    speech_end_after: int | None, reply: bool = True, close_in_greeting: bool = False
+) -> Callable[[ServerConnection], Awaitable[None]]:
+    async def handle(websocket: ServerConnection) -> None:
+        assert json.loads(await websocket.recv())["type"] == "start"
+        await websocket.send(json.dumps({"type": "bot_text", "kind": "greeting"}))
+        await websocket.send(b"\x01\x00" * 160)
+        if close_in_greeting:
+            return
+        await websocket.send(json.dumps({"type": "reply_audio_end"}))
+        frames = 0
+        async for message in websocket:
+            if not isinstance(message, bytes):
+                return
+            frames += 1
+            if frames == speech_end_after:
+                await websocket.send(json.dumps({"type": "vad", "event": "speech_end"}))
+                if reply:
+                    await websocket.send(json.dumps({"type": "bot_text", "kind": "answer"}))
+                    await websocket.send(b"\x01\x00" * 160)
+                await websocket.send(json.dumps({"type": "reply_audio_end"}))
+                await websocket.send(json.dumps(TIMING))
+
+    return handle
+
+
+def measured(handler: Callable[[ServerConnection], Awaitable[None]]) -> TurnResult:
+    async def run() -> TurnResult:
+        async with serve(handler, "127.0.0.1", 0) as server:
+            port = server.sockets[0].getsockname()[1]
+            return await measure_turn(f"ws://127.0.0.1:{port}", QUESTION, CLIP)
+
+    return asyncio.run(run())
+
+
+def test_a_turn_skips_the_greeting_audio_and_measures_every_stage() -> None:
+    result = measured(scripted_server(speech_end_after=CLIP_FRAMES + 3))
+    assert result.kind == "answer" and not result.split and not result.failure
+    assert set(result.stages) == set(STAGES)
+    assert result.stages["asr"] == 0.4 and result.stages["llm"] == 0.9
+    assert 0 < result.stages["vad"] < 1.0
+    assert result.stages["ttfa"] == pytest.approx(
+        result.stages["vad"] + result.stages["ttfa_from_vad"]
+    )
+
+
+def test_a_turn_that_ends_before_the_clip_is_split() -> None:
+    result = measured(scripted_server(speech_end_after=3))
+    assert result.split
+    assert not counted(result)
+
+
+def test_a_turn_without_bot_audio_is_a_failure() -> None:
+    result = measured(scripted_server(speech_end_after=CLIP_FRAMES + 3, reply=False))
+    assert result.failure == "no_audio"
+    assert result.stages == {}
+
+
+def test_a_server_that_closes_during_the_greeting_is_a_failure() -> None:
+    assert measured(scripted_server(None, close_in_greeting=True)).failure in {
+        "closed_before_greeting_ended",
+        "connection_closed",
+    }
+
+
+def test_a_server_that_never_answers_times_out(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("latency.TURN_TIMEOUT_SECONDS", 1.0)
+    assert measured(scripted_server(speech_end_after=None)).failure == "timeout"
+
+
+def test_a_server_that_is_not_there_is_a_connect_failure() -> None:
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    result = asyncio.run(measure_turn(f"ws://127.0.0.1:{port}", QUESTION, CLIP))
+    assert result.failure == "connect_failed"
+    assert not port_in_use(port)
+
+
+def test_only_answered_turns_are_counted() -> None:
+    answered = TurnResult("a", "en", "answer", stages={"ttfa": 2.0})
+    handoff = TurnResult("h", "en", "handoff", stages={"ttfa": 0.5})
+    failed = TurnResult("f", "en", "answer", failure="timeout")
+    assert [counted(result) for result in (answered, handoff, failed)] == [True, False, False]
+    assert summarise([answered, handoff, failed])["ttfa"] == (1, 2.0, 2.0)

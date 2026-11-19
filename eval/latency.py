@@ -4,6 +4,7 @@ import csv
 import hashlib
 import json
 import os
+import socket
 import subprocess
 import sys
 import time
@@ -17,6 +18,7 @@ from pathlib import Path
 
 import numpy as np
 from websockets.asyncio.client import ClientConnection, connect
+from websockets.exceptions import ConnectionClosed
 
 from kotha.api.protocol import Readiness
 from kotha.audio.convert import SAMPLE_RATE_HZ, float_to_pcm16
@@ -30,14 +32,17 @@ from wer import latency_percentiles
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXPERIMENT_NAME = "kotha-latency"
 FRAME_SAMPLES = SAMPLE_RATE_HZ // 50
+FRAME_SECONDS = FRAME_SAMPLES / SAMPLE_RATE_HZ
 LEAD_SILENCE_SECONDS = 0.3
 # the end of speech is the last sample above 1% of the clip's peak, not the end of the TTS output
 AUDIBLE_FRACTION = 0.01
 TURN_TIMEOUT_SECONDS = 120.0
 READY_TIMEOUT_SECONDS = 600.0
+SERVER_EXIT_SECONDS = 60.0
 SERVER_STAGES = ("asr", "retrieval", "llm", "tts_first_audio")
 STAGES = ("vad", *SERVER_STAGES, "ttfa", "ttfa_from_vad")
-RESULT_COLUMNS = ("question_id", "lang", "kind", "split", *STAGES)
+RESULT_COLUMNS = ("question_id", "lang", "kind", "split", "failure", *STAGES)
+START = json.dumps({"type": "start", "sample_rate": 16000, "consent": True})
 
 
 @dataclass
@@ -46,6 +51,7 @@ class TurnResult:
     lang: str
     kind: str = ""
     split: bool = False
+    failure: str = ""
     stages: dict[str, float] = field(default_factory=dict)
 
 
@@ -76,8 +82,12 @@ def turn_stages(
     return stages
 
 
+def counted(result: TurnResult) -> bool:
+    return result.kind == "answer" and not result.split and not result.failure
+
+
 def summarise(results: Sequence[TurnResult]) -> dict[str, tuple[int, float, float]]:
-    measured = [result for result in results if not result.split]
+    measured = [result for result in results if counted(result)]
     summary = {}
     for stage in STAGES:
         values = [result.stages[stage] for result in measured if stage in result.stages]
@@ -86,63 +96,97 @@ def summarise(results: Sequence[TurnResult]) -> dict[str, tuple[int, float, floa
     return summary
 
 
-async def send_paced(
-    websocket: ClientConnection, frames: Iterable[bytes], clock: Iterator[float]
-) -> None:
-    for frame, due in zip(frames, clock, strict=False):
-        await asyncio.sleep(max(0.0, due - time.perf_counter()))
-        await websocket.send(frame)
-
-
 def frame_clock(start: float) -> Iterator[float]:
     index = 0
     while True:
-        yield start + index * FRAME_SAMPLES / SAMPLE_RATE_HZ
+        yield start + index * FRAME_SECONDS
         index += 1
+
+
+async def send_paced(
+    websocket: ClientConnection, frames: Iterable[bytes], clock: Iterator[float]
+) -> float:
+    due = time.perf_counter()
+    for frame, due in zip(frames, clock, strict=False):
+        await asyncio.sleep(max(0.0, due - time.perf_counter()))
+        await websocket.send(frame)
+    return due
+
+
+async def skip_greeting(websocket: ClientConnection) -> bool:
+    async for message in websocket:
+        if isinstance(message, str) and json.loads(message)["type"] == "reply_audio_end":
+            return True
+    return False
+
+
+async def speak_and_listen(
+    websocket: ClientConnection, clip: np.ndarray, result: TurnResult
+) -> None:
+    await websocket.send(START)
+    if not await skip_greeting(websocket):
+        result.failure = "closed_before_greeting_ended"
+        return
+    speech = speech_frames(clip)
+    clock = frame_clock(time.perf_counter())
+    last_frame_due = await send_paced(websocket, speech, clock)
+    speech_end = last_frame_due + len(speech[-1]) / 2 / SAMPLE_RATE_HZ
+    silence = float_to_pcm16(np.zeros(FRAME_SAMPLES, dtype=np.float32))
+    silence_task = asyncio.create_task(send_paced(websocket, repeat(silence), clock))
+    vad_end = first_audio = None
+    timing: dict[str, float | None] = {}
+    try:
+        while not timing:
+            message = await websocket.recv()
+            now = time.perf_counter()
+            if isinstance(message, bytes):
+                first_audio = first_audio or now
+                continue
+            event = json.loads(message)
+            if event["type"] == "vad" and event["event"] == "speech_end":
+                vad_end = vad_end or now
+            elif event["type"] == "bot_text":
+                result.kind = event["kind"]
+            elif event["type"] == "timing":
+                timing = event
+    finally:
+        silence_task.cancel()
+        await asyncio.gather(silence_task, return_exceptions=True)
+    await websocket.send(json.dumps({"type": "stop"}))
+    result.split = vad_end is None or vad_end < speech_end
+    if vad_end is None or first_audio is None:
+        result.failure = "no_audio"
+        return
+    result.stages = turn_stages(speech_end, vad_end, first_audio, timing)
 
 
 async def measure_turn(url: str, question: Question, clip: np.ndarray) -> TurnResult:
     result = TurnResult(question.id, question.lang)
-    async with connect(url, max_size=None) as websocket:
-        await websocket.send(json.dumps({"type": "start", "sample_rate": 16000, "consent": True}))
-        async for greeting in websocket:
-            if isinstance(greeting, str) and json.loads(greeting)["type"] == "reply_audio_end":
-                break
-        speech = speech_frames(clip)
-        silence = float_to_pcm16(np.zeros(FRAME_SAMPLES, dtype=np.float32))
-        clock = frame_clock(time.perf_counter())
-        await send_paced(websocket, speech, clock)
-        speech_end = time.perf_counter()
-        silence_task = asyncio.create_task(send_paced(websocket, repeat(silence), clock))
-        vad_end = first_audio = None
-        timing: dict[str, float | None] = {}
-        try:
-            async with asyncio.timeout(TURN_TIMEOUT_SECONDS):
-                while not timing:
-                    message = await websocket.recv()
-                    now = time.perf_counter()
-                    if isinstance(message, bytes):
-                        first_audio = first_audio or now
-                        continue
-                    event = json.loads(message)
-                    if event["type"] == "vad" and event["event"] == "speech_end":
-                        vad_end = vad_end or now
-                    elif event["type"] == "bot_text":
-                        result.kind = event["kind"]
-                    elif event["type"] == "timing":
-                        timing = event
-        finally:
-            silence_task.cancel()
-        await websocket.send(json.dumps({"type": "stop"}))
-    result.split = vad_end is None or vad_end < speech_end
-    if vad_end is not None and first_audio is not None:
-        result.stages = turn_stages(speech_end, vad_end, first_audio, timing)
+    try:
+        async with asyncio.timeout(TURN_TIMEOUT_SECONDS):
+            async with connect(url, max_size=None) as websocket:
+                await speak_and_listen(websocket, clip, result)
+    except TimeoutError:
+        result.failure = "timeout"
+    except ConnectionClosed:
+        result.failure = "connection_closed"
+    except OSError:
+        result.failure = "connect_failed"
     return result
 
 
-def wait_until_ready(base_url: str, deadline_seconds: float) -> Readiness:
+def port_in_use(port: int) -> bool:
+    with socket.socket() as probe:
+        return probe.connect_ex(("127.0.0.1", port)) == 0
+
+
+def wait_until_ready(
+    base_url: str, deadline_seconds: float, server: subprocess.Popen[bytes] | None
+) -> Readiness:
     give_up_at = time.perf_counter() + deadline_seconds
     while time.perf_counter() < give_up_at:
+        if server is not None and server.poll() is not None:
+            raise RuntimeError(f"the app exited with code {server.returncode} before it was ready")
         try:
             with urllib.request.urlopen(f"{base_url}/v1/ready", timeout=2) as response:
                 return Readiness.model_validate_json(response.read())
@@ -156,6 +200,15 @@ def launch_server(port: int, log_path: Path) -> subprocess.Popen[bytes]:
     command += ["--port", str(port), "--ws-max-size", "65536"]
     with log_path.open("wb") as log:
         return subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
+
+
+def stop_server(server: subprocess.Popen[bytes]) -> None:
+    server.terminate()
+    try:
+        server.wait(timeout=SERVER_EXIT_SECONDS)
+    except subprocess.TimeoutExpired:
+        server.kill()
+        server.wait()
 
 
 def synthesise_clips(questions: Sequence[Question]) -> list[np.ndarray]:
@@ -176,7 +229,8 @@ def write_results(path: Path, results: Sequence[TurnResult]) -> None:
             stages = [
                 f"{result.stages[stage]:.4f}" if stage in result.stages else "" for stage in STAGES
             ]
-            writer.writerow([result.question_id, result.lang, result.kind, result.split, *stages])
+            row = [result.question_id, result.lang, result.kind, result.split, result.failure]
+            writer.writerow([*row, *stages])
 
 
 def print_summary(summary: Mapping[str, tuple[int, float, float]]) -> None:
@@ -188,10 +242,14 @@ def print_summary(summary: Mapping[str, tuple[int, float, float]]) -> None:
 async def measure_all(
     url: str, questions: Sequence[Question], clips: Sequence[np.ndarray]
 ) -> list[TurnResult]:
+    # the first turn of a process pays for the LLM client's first connection, so it is not counted
+    warm_up = await measure_turn(url, questions[0], clips[0])
+    print(f"warm-up turn (not counted): {warm_up.kind or warm_up.failure}")
     results = []
     for question, clip in zip(questions, clips, strict=True):
         result = await measure_turn(url, question, clip)
-        print(f"{question.id}: {result.kind or 'no reply'}{' (split)' if result.split else ''}")
+        notes = [note for note in (result.failure, "split" if result.split else "") if note]
+        print(f"{question.id}: {result.kind or '-'} {' '.join(notes)}".rstrip())
         results.append(result)
     return results
 
@@ -207,33 +265,36 @@ def main() -> None:
     output: Path = args.output.resolve()
     if output.is_relative_to(REPO_ROOT):
         parser.error(f"--output {output} must be outside the repository")
+    if args.launch and port_in_use(args.port):
+        parser.error(f"port {args.port} is already in use; --launch needs a free port")
     output.parent.mkdir(parents=True, exist_ok=True)
     tags = git_tags(REPO_ROOT)
     known_doc_ids = {document.doc_id for document in read_documents(KB_FOLDER)}
     questions = read_testset(TESTSET_PATH, known_doc_ids)[: args.limit]
     clips = synthesise_clips(questions)
 
-    base_url = f"http://127.0.0.1:{args.port}"
     server = None
     cold_start_seconds = None
     launched = time.perf_counter()
     if args.launch:
         server = launch_server(args.port, output.with_suffix(".server.log"))
     try:
-        readiness = wait_until_ready(base_url, READY_TIMEOUT_SECONDS)
+        readiness = wait_until_ready(f"http://127.0.0.1:{args.port}", READY_TIMEOUT_SECONDS, server)
         if server is not None:
             cold_start_seconds = time.perf_counter() - launched
         url = f"ws://127.0.0.1:{args.port}/v1/calls/stream"
         results = asyncio.run(measure_all(url, questions, clips))
     finally:
         if server is not None:
-            server.terminate()
-            server.wait(timeout=60)
+            stop_server(server)
 
     summary = summarise(results)
     split = sum(result.split for result in results)
-    kinds = Counter(result.kind or "no_reply" for result in results)
-    print(f"turns: {len(results)}, split by VAD (excluded): {split}, replies: {dict(kinds)}")
+    failed = Counter(result.failure for result in results if result.failure)
+    kinds = Counter(result.kind for result in results if result.kind)
+    print(f"turns: {len(results)}, counted (answers, not split, not failed): ", end="")
+    print(f"{sum(counted(result) for result in results)}, split: {split}")
+    print(f"replies: {dict(kinds)}, failures: {dict(failed)}")
     if cold_start_seconds is not None:
         print(f"cold start (process start to ready): {cold_start_seconds:.1f} s")
     print_summary(summary)
@@ -246,18 +307,22 @@ def main() -> None:
             for name, value in (("p50", p50), ("p95", p95))
         }
         metrics["turns"] = len(results)
+        metrics["counted_turns"] = sum(counted(result) for result in results)
         metrics["split_turns"] = split
         metrics.update({f"replies.{kind}": count for kind, count in kinds.items()})
+        metrics.update({f"failures.{failure}": count for failure, count in failed.items()})
         metrics["startup_seconds"] = readiness.startup_seconds
         if cold_start_seconds is not None:
             metrics["cold_start_seconds"] = cold_start_seconds
         params = {
             "testset_sha256": hashlib.sha256(TESTSET_PATH.read_bytes()).hexdigest(),
             "questions": str(len(questions)),
-            "asr_model": os.environ.get("KOTHA_ASR_MODEL", ""),
+            "warm_up_turns": "1",
+            "counted": "answers only, not split, not failed",
+            "asr_model": os.environ.get("KOTHA_ASR_MODEL", "unset"),
             "asr_device": os.environ.get("KOTHA_ASR_DEVICE", "cpu"),
             "input": "synthetic: rag_test questions spoken by the MMS voices",
-            "frame_ms": str(1000 * FRAME_SAMPLES // SAMPLE_RATE_HZ),
+            "frame_ms": str(round(1000 * FRAME_SECONDS)),
         }
         run_id = log_run(client, experiment, params, metrics, tags, [output])
         print(f"mlflow run: {run_id}")
