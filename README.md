@@ -49,6 +49,22 @@ uv run ruff check . && uv run ruff format --check .
 The database tests are skipped unless `DATABASE_URL` is set; `docs/runbook.md` ("Local database")
 shows how to start PostgreSQL with Docker and run them.
 
+## Run the stack
+
+Prerequisites: Docker, a Gemini API key, and the models in place (bge-m3 and the MMS voices in the
+Hugging Face cache, a converted Whisper model in `models/`; `docs/runbook.md` has the one-time
+download commands).
+
+```bash
+cp .env.example .env                                     # then fill in the key and a password
+docker compose up -d --wait db
+docker compose run --rm app python -m kotha.kb.ingest    # once, and after editing data/kb/
+docker compose up -d --wait app                          # CPU image; ready when healthy
+```
+
+Open http://127.0.0.1:8000, tick the consent box and press Start. `docs/runbook.md` ("Docker
+stack") explains the settings.
+
 ## Results
 
 There are no results yet. Every number will come from a committed evaluation run and will be reported in [EVALUATION.md](EVALUATION.md).
