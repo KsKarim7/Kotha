@@ -12,6 +12,8 @@ LogValue = str | int | float | bool
 
 
 def configure_logging() -> None:
+    if LOGGER.handlers:
+        return
     handler = logging.StreamHandler()
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
     LOGGER.addHandler(handler)

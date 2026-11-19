@@ -30,11 +30,16 @@ class TurnDetector:
         min_speech_ms: int = 250,
         hangover_ms: int = 700,
         preroll_ms: int = 300,
+        max_turn_ms: int = 30_000,
     ) -> None:
         if end_threshold >= start_threshold:
             raise ValueError("end_threshold must be below start_threshold")
         if min(min_speech_ms, hangover_ms, preroll_ms) <= 0:
             raise ValueError("min_speech_ms, hangover_ms and preroll_ms must be positive")
+        if max_turn_ms <= min_speech_ms:
+            raise ValueError("max_turn_ms must be longer than min_speech_ms")
+        self._max_turn_windows = self._to_windows(max_turn_ms)
+        self._turn_was_cut = False
         self._probability = probability
         self._start_threshold = start_threshold
         self._end_threshold = end_threshold
@@ -61,7 +66,12 @@ class TurnDetector:
         position = self._samples_pushed
         self._samples_pushed += WINDOW_SAMPLES
         event = self._advance(stored_window, speech_probability, position)
-        self._preroll.append(stored_window)
+        if self._turn_was_cut:
+            # the next turn must not repeat the end of the cut one as its pre-roll
+            self._preroll.clear()
+            self._turn_was_cut = False
+        else:
+            self._preroll.append(stored_window)
         return event
 
     def _advance(
@@ -76,6 +86,10 @@ class TurnDetector:
             self._silence_windows = 0
             self._confirmed = False
         self._turn.append(window)
+        if self._confirmed and len(self._turn) >= self._max_turn_windows:
+            self._end_sample = position + WINDOW_SAMPLES
+            self._turn_was_cut = True
+            return self.flush()
 
         if speech_probability >= self._end_threshold:
             self._speech_windows += 1

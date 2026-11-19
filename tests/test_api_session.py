@@ -1,7 +1,8 @@
 import json
 import logging
 import threading
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable, Iterator
+from contextlib import contextmanager
 from typing import Any
 
 import numpy as np
@@ -10,6 +11,7 @@ from starlette.testclient import TestClient, WebSocketTestSession
 
 from kotha.api.app import create_app
 from kotha.api.session import (
+    MAX_BAD_MESSAGES,
     MAX_FRAME_BYTES,
     CallServices,
     frame_error,
@@ -26,9 +28,11 @@ from kotha.dialogue.answer import (
     Source,
 )
 from kotha.dialogue.routing import Language
+from kotha.vad import WINDOW_SAMPLES
 
-FRAME_SAMPLES = SAMPLE_RATE_HZ // 10
 QUESTION = "how do I replace my SIM"
+START = {"type": "start", "sample_rate": 16000, "consent": True}
+Event = dict[str, Any] | bytes
 
 
 def loud_probability(window: np.ndarray) -> float:
@@ -48,12 +52,14 @@ def transcript(text: str = QUESTION, ratio: float = 1.2, tokens: int = 12) -> Tr
 
 
 class FakeAsr:
-    def __init__(self, result: Transcript | None = None) -> None:
+    def __init__(self, result: Transcript | Exception | None = None) -> None:
         self.result = result or transcript()
-        self.turn_seconds: list[float] = []
+        self.turn_samples: list[int] = []
 
     def transcribe(self, audio_16k: np.ndarray) -> Transcript:
-        self.turn_seconds.append(len(audio_16k) / SAMPLE_RATE_HZ)
+        self.turn_samples.append(len(audio_16k))
+        if isinstance(self.result, Exception):
+            raise self.result
         return self.result
 
 
@@ -75,23 +81,45 @@ class FakePipeline:
 
 
 class FakeTts:
-    def __init__(self) -> None:
+    def __init__(self, fail_on: str | None = None) -> None:
         self.spoken: list[tuple[str, Language]] = []
+        self.fail_on = fail_on
 
     async def speak(self, text: str, lang: Language) -> AsyncIterator[np.ndarray]:
         self.spoken.append((text, lang))
-        for _ in range(2):
-            yield np.full(160, 0.25, dtype=np.float32)
+        yield np.full(160, 0.25, dtype=np.float32)
+        if text == self.fail_on:
+            raise RuntimeError("synthesis failed")
+        yield np.full(160, 0.25, dtype=np.float32)
 
 
-def services(
-    asr: FakeAsr | None = None, pipeline: FakePipeline | None = None
-) -> tuple[CallServices, FakeAsr, FakePipeline, FakeTts]:
-    asr, pipeline, tts = asr or FakeAsr(), pipeline or FakePipeline(), FakeTts()
-    return CallServices(lambda: loud_probability, asr, pipeline, tts), asr, pipeline, tts
+@contextmanager
+def call(
+    asr: FakeAsr | None = None,
+    pipeline: FakePipeline | None = None,
+    tts: FakeTts | None = None,
+) -> Iterator[WebSocketTestSession]:
+    services = CallServices(
+        lambda: loud_probability, asr or FakeAsr(), pipeline or FakePipeline(), tts or FakeTts()
+    )
+    with TestClient(create_app(lambda _: services)) as client:
+        with client.websocket_connect("/v1/calls/stream") as websocket:
+            assert next_event(websocket) == {
+                "type": "ready",
+                "sample_rate": 16000,
+                "audio_format": "pcm16le_mono",
+            }
+            yield websocket
 
 
-def speech_then_silence(speech_seconds: float = 1.0, silence_seconds: float = 1.2) -> list[bytes]:
+def started(websocket: WebSocketTestSession) -> list[Event]:
+    websocket.send_text(json.dumps(START))
+    return events_until(websocket, "reply_audio_end")
+
+
+def speech_then_silence(
+    speech_seconds: float = 1.0, silence_seconds: float = 1.2, frame_samples: int = 1_600
+) -> list[bytes]:
     audio = np.concatenate(
         [
             np.full(int(speech_seconds * SAMPLE_RATE_HZ), 0.5, dtype=np.float32),
@@ -99,19 +127,26 @@ def speech_then_silence(speech_seconds: float = 1.0, silence_seconds: float = 1.
         ]
     )
     pcm = float_to_pcm16(audio)
-    step = FRAME_SAMPLES * 2
+    step = frame_samples * 2
     return [pcm[start : start + step] for start in range(0, len(pcm), step)]
 
 
-def next_event(websocket: WebSocketTestSession) -> dict[str, Any] | bytes:
+def say(websocket: WebSocketTestSession, frames: list[bytes] | None = None) -> None:
+    for frame in frames or speech_then_silence():
+        websocket.send_bytes(frame)
+
+
+def next_event(websocket: WebSocketTestSession) -> Event:
     message = websocket.receive()
     if message.get("bytes") is not None:
         return message["bytes"]
+    if message["type"] == "websocket.close":
+        return {"type": "closed", "code": message.get("code")}
     return json.loads(message["text"])
 
 
-def events_until(websocket: WebSocketTestSession, last_type: str) -> list[dict[str, Any] | bytes]:
-    events: list[dict[str, Any] | bytes] = []
+def events_until(websocket: WebSocketTestSession, last_type: str) -> list[Event]:
+    events: list[Event] = []
     while True:
         event = next_event(websocket)
         events.append(event)
@@ -119,79 +154,90 @@ def events_until(websocket: WebSocketTestSession, last_type: str) -> list[dict[s
             return events
 
 
-def types(events: list[dict[str, Any] | bytes]) -> list[str]:
+def types(events: list[Event]) -> list[str]:
     return ["audio" if isinstance(event, bytes) else event["type"] for event in events]
 
 
-def connect_and_skip_greeting(client: TestClient) -> Any:
-    websocket = client.websocket_connect("/ws/call")
-    session = websocket.__enter__()
-    events_until(session, "reply_audio_end")
-    return websocket, session
+def first(events: list[Event], event_type: str) -> dict[str, Any]:
+    return next(e for e in events if isinstance(e, dict) and e["type"] == event_type)
 
 
-def test_a_call_starts_with_ready_and_the_bangla_greeting() -> None:
-    call_services, _, _, tts = services()
-    with TestClient(create_app(lambda _: call_services)) as client:
-        with client.websocket_connect("/ws/call") as websocket:
-            events = events_until(websocket, "reply_audio_end")
-    assert types(events) == ["ready", "reply", "audio", "audio", "reply_audio_end"]
-    ready, greeting = events[0], events[1]
-    assert isinstance(ready, dict) and ready == {
-        "type": "ready",
-        "sample_rate": 16000,
-        "audio_format": "pcm16le_mono",
+def finishes_within(seconds: float, body: Callable[[], None]) -> bool:
+    worker = threading.Thread(target=body, daemon=True)
+    worker.start()
+    worker.join(timeout=seconds)
+    return not worker.is_alive()
+
+
+def test_the_greeting_waits_for_start_with_consent() -> None:
+    tts = FakeTts()
+    with call(tts=tts) as websocket:
+        events = started(websocket)
+    assert types(events) == ["bot_text", "audio", "audio", "reply_audio_end"]
+    greeting = first(events, "bot_text")
+    assert greeting == {
+        "type": "bot_text",
+        "kind": "greeting",
+        "lang": "bn",
+        "text": GREETING["bn"],
+        "citations": [],
     }
-    assert isinstance(greeting, dict) and greeting["kind"] == "greeting"
-    assert greeting["text"] == GREETING["bn"]
     assert tts.spoken == [(GREETING["bn"], "bn")]
-    assert events[2] == float_to_pcm16(np.full(160, 0.25, dtype=np.float32))
+    assert events[1] == float_to_pcm16(np.full(160, 0.25, dtype=np.float32))
 
 
-def test_a_spoken_turn_gets_a_transcript_a_reply_with_sources_and_audio() -> None:
-    call_services, asr, pipeline, tts = services()
-    with TestClient(create_app(lambda _: call_services)) as client:
-        with client.websocket_connect("/ws/call") as websocket:
-            events_until(websocket, "reply_audio_end")
-            for frame in speech_then_silence():
-                websocket.send_bytes(frame)
-            events = events_until(websocket, "reply_audio_end")
+def test_a_spoken_turn_gets_vad_events_a_transcript_and_a_cited_reply() -> None:
+    asr, pipeline, tts = FakeAsr(), FakePipeline(), FakeTts()
+    with call(asr, pipeline, tts) as websocket:
+        started(websocket)
+        say(websocket)
+        events = events_until(websocket, "reply_audio_end")
     assert types(events) == [
-        "speech_started",
+        "vad",
+        "vad",
         "transcript",
-        "reply",
+        "bot_text",
         "audio",
         "audio",
         "reply_audio_end",
     ]
-    assert events[1] == {"type": "transcript", "text": QUESTION}
-    reply = events[2]
-    assert isinstance(reply, dict)
+    assert [event["event"] for event in events[:2] if isinstance(event, dict)] == [
+        "speech_start",
+        "speech_end",
+    ]
+    assert events[2] == {"type": "transcript", "text": QUESTION, "final": True}
+    reply = first(events, "bot_text")
     assert reply["kind"] == "answer" and reply["lang"] == "en"
-    assert reply["sources"] == [
+    assert reply["citations"] == [
         {"doc_id": "sim-replacement", "title": "Replacing a SIM"},
         {"doc_id": "service-hours", "title": "Service hours"},
     ]
     assert pipeline.questions == [QUESTION]
-    assert len(asr.turn_seconds) == 1 and 1.0 <= asr.turn_seconds[0] < 2.2
     assert tts.spoken[-1] == ("Visit a service centre.", "en")
 
 
+def test_frames_that_split_windows_lose_no_samples() -> None:
+    asr = FakeAsr()
+    with call(asr=asr) as websocket:
+        started(websocket)
+        say(websocket, speech_then_silence(frame_samples=1_000))
+        events_until(websocket, "reply_audio_end")
+    speech_windows = -(-SAMPLE_RATE_HZ // WINDOW_SAMPLES)
+    hangover_windows = -(-700 * SAMPLE_RATE_HZ // (1000 * WINDOW_SAMPLES))
+    assert asr.turn_samples == [(speech_windows + hangover_windows) * WINDOW_SAMPLES]
+
+
 def test_silence_and_quiet_noise_never_reach_asr() -> None:
-    call_services, asr, _, _ = services()
-    rng = np.random.default_rng(0)
-    noise = (rng.standard_normal(3 * SAMPLE_RATE_HZ) * 0.02).astype(np.float32)
-    with TestClient(create_app(lambda _: call_services)) as client:
-        with client.websocket_connect("/ws/call") as websocket:
-            events_until(websocket, "reply_audio_end")
-            websocket.send_bytes(float_to_pcm16(np.zeros(SAMPLE_RATE_HZ, dtype=np.float32)))
-            pcm = float_to_pcm16(noise)
-            for start in range(0, len(pcm), FRAME_SAMPLES * 2):
-                websocket.send_bytes(pcm[start : start + FRAME_SAMPLES * 2])
-            for frame in speech_then_silence():
-                websocket.send_bytes(frame)
-            events_until(websocket, "reply_audio_end")
-    assert len(asr.turn_seconds) == 1
+    asr = FakeAsr()
+    noise = (np.random.default_rng(0).standard_normal(3 * SAMPLE_RATE_HZ) * 0.02).astype(np.float32)
+    with call(asr=asr) as websocket:
+        started(websocket)
+        say(websocket, [float_to_pcm16(np.zeros(SAMPLE_RATE_HZ, dtype=np.float32))])
+        pcm = float_to_pcm16(noise)
+        say(websocket, [pcm[start : start + 3_200] for start in range(0, len(pcm), 3_200)])
+        say(websocket)
+        events_until(websocket, "reply_audio_end")
+    assert len(asr.turn_samples) == 1
 
 
 @pytest.mark.parametrize(
@@ -206,15 +252,13 @@ def test_an_unusable_transcript_gets_the_repeat_prompt_without_the_pipeline(
     bad_transcript: Transcript, reason: str
 ) -> None:
     assert unusable_reason(bad_transcript) == reason
-    call_services, _, pipeline, _ = services(asr=FakeAsr(bad_transcript))
-    with TestClient(create_app(lambda _: call_services)) as client:
-        with client.websocket_connect("/ws/call") as websocket:
-            events_until(websocket, "reply_audio_end")
-            for frame in speech_then_silence():
-                websocket.send_bytes(frame)
-            events = events_until(websocket, "reply_audio_end")
+    pipeline = FakePipeline()
+    with call(asr=FakeAsr(bad_transcript), pipeline=pipeline) as websocket:
+        started(websocket)
+        say(websocket)
+        events = events_until(websocket, "reply_audio_end")
     assert "transcript" not in types(events)
-    reply = next(event for event in events if isinstance(event, dict) and event["type"] == "reply")
+    reply = first(events, "bot_text")
     assert reply["kind"] == "repeat"
     assert reply["text"] == FIXED_REPLIES[ReplyKind.REPEAT]["bn"]
     assert pipeline.questions == []
@@ -222,6 +266,134 @@ def test_an_unusable_transcript_gets_the_repeat_prompt_without_the_pipeline(
 
 def test_a_usable_transcript_passes_the_gate() -> None:
     assert unusable_reason(transcript(ratio=2.4, tokens=223)) is None
+
+
+def test_an_asr_error_is_answered_and_two_failed_turns_hand_off() -> None:
+    asr = FakeAsr(RuntimeError("decoder crashed"))
+    with call(asr=asr) as websocket:
+        started(websocket)
+        say(websocket)
+        first_turn = events_until(websocket, "reply_audio_end")
+        say(websocket)
+        second_turn = events_until(websocket, "handoff")
+    assert first(first_turn, "bot_text")["kind"] == "repeat"
+    assert first(second_turn, "bot_text")["kind"] == "handoff"
+    assert first(second_turn, "bot_text")["text"] == FIXED_REPLIES[ReplyKind.HANDOFF]["bn"]
+    assert first(second_turn, "handoff") == {"type": "handoff", "reason": "failed_turns"}
+    assert types(second_turn)[-2:] == ["reply_audio_end", "handoff"]
+
+
+def test_a_good_turn_resets_the_failed_turn_count() -> None:
+    asr = FakeAsr(transcript(ratio=5.0))
+    with call(asr=asr) as websocket:
+        started(websocket)
+        say(websocket)
+        events_until(websocket, "reply_audio_end")
+        asr.result = transcript()
+        say(websocket)
+        events_until(websocket, "reply_audio_end")
+        asr.result = transcript(ratio=5.0)
+        say(websocket)
+        events = events_until(websocket, "reply_audio_end")
+    reply = first(events, "bot_text")
+    assert reply["kind"] == "repeat" and reply["lang"] == "en"
+
+
+def test_a_tts_error_sends_an_error_and_still_ends_the_reply_audio() -> None:
+    with call(tts=FakeTts(fail_on="Visit a service centre.")) as websocket:
+        started(websocket)
+        say(websocket)
+        events = events_until(websocket, "reply_audio_end")
+        say(websocket)
+        next_turn = events_until(websocket, "reply_audio_end")
+    assert types(events)[-4:] == ["bot_text", "audio", "error", "reply_audio_end"]
+    assert first(events, "error") == {"type": "error", "code": "tts_failed"}
+    assert first(next_turn, "bot_text")["kind"] == "answer"
+
+
+def test_the_pipeline_handoff_reason_reaches_the_client() -> None:
+    class HandoffPipeline(FakePipeline):
+        def reply(self, question: str) -> BotReply:
+            return BotReply(ReplyKind.HANDOFF, "bn", "এজেন্ট", (), HandoffReason.NO_ANSWER)
+
+    with call(pipeline=HandoffPipeline()) as websocket:
+        started(websocket)
+        say(websocket)
+        events = events_until(websocket, "handoff")
+    assert first(events, "bot_text")["kind"] == "handoff"
+    assert first(events, "handoff") == {"type": "handoff", "reason": "no_answer"}
+
+
+def test_turns_that_arrive_while_the_bot_is_busy_keep_only_the_latest_waiting(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    release = threading.Event()
+    pipeline = FakePipeline(release)
+    caplog.set_level(logging.INFO, logger="kotha")
+    with call(pipeline=pipeline) as websocket:
+        started(websocket)
+        for _ in range(3):
+            say(websocket)
+        speech_ends = 0
+        while speech_ends < 3:
+            event = next_event(websocket)
+            if isinstance(event, dict) and event.get("event") == "speech_end":
+                speech_ends += 1
+        release.set()
+        events_until(websocket, "reply_audio_end")
+        events_until(websocket, "reply_audio_end")
+    assert pipeline.questions == [QUESTION, QUESTION]
+    assert any("event=turn_dropped" in message for message in caplog.messages)
+
+
+@pytest.mark.parametrize(
+    ("message", "code"),
+    [
+        ("hello", "bad_control_message"),
+        (
+            json.dumps({"type": "start", "sample_rate": 8000, "consent": True}),
+            "bad_control_message",
+        ),
+        (json.dumps({"type": "dance"}), "bad_control_message"),
+        (json.dumps(START), "already_started"),
+    ],
+)
+def test_bad_control_messages_get_error_events_and_the_call_goes_on(
+    message: str, code: str
+) -> None:
+    asr = FakeAsr()
+    with call(asr=asr) as websocket:
+        started(websocket)
+        websocket.send_text(message)
+        assert next_event(websocket) == {"type": "error", "code": code}
+        say(websocket)
+        events = events_until(websocket, "reply_audio_end")
+    assert first(events, "bot_text")["kind"] == "answer"
+
+
+def test_audio_before_start_is_refused_and_never_reaches_asr() -> None:
+    asr = FakeAsr()
+    with call(asr=asr) as websocket:
+        websocket.send_bytes(b"\x00\x00" * 160)
+        assert next_event(websocket) == {"type": "error", "code": "not_started"}
+        started(websocket)
+    assert asr.turn_samples == []
+
+
+def test_start_without_consent_ends_the_call() -> None:
+    tts = FakeTts()
+    with call(tts=tts) as websocket:
+        websocket.send_text(json.dumps({**START, "consent": False}))
+        assert next_event(websocket) == {"type": "error", "code": "consent_required"}
+        assert next_event(websocket)["type"] == "closed"  # type: ignore[index]
+    assert tts.spoken == []
+
+
+def test_stop_ends_the_call() -> None:
+    with call() as websocket:
+        started(websocket)
+        websocket.send_text(json.dumps({"type": "stop"}))
+        assert next_event(websocket)["type"] == "closed"  # type: ignore[index]
 
 
 @pytest.mark.parametrize(
@@ -235,88 +407,60 @@ def test_frame_errors(frame: bytes, code: str) -> None:
 
 
 def test_malformed_frames_get_error_events_and_the_call_goes_on() -> None:
-    call_services, asr, _, _ = services()
-    with TestClient(create_app(lambda _: call_services)) as client:
-        with client.websocket_connect("/ws/call") as websocket:
-            events_until(websocket, "reply_audio_end")
-            websocket.send_text("hello")
-            assert next_event(websocket) == {"type": "error", "code": "text_frame_ignored"}
-            websocket.send_bytes(b"\x01\x02\x03")
-            assert next_event(websocket) == {"type": "error", "code": "odd_length_frame"}
-            websocket.send_bytes(b"\x00" * (MAX_FRAME_BYTES + 2))
-            assert next_event(websocket) == {"type": "error", "code": "frame_too_large"}
-            for frame in speech_then_silence():
-                websocket.send_bytes(frame)
-            events = events_until(websocket, "reply_audio_end")
-    assert "reply" in types(events)
-    assert len(asr.turn_seconds) == 1
-
-
-def test_the_repeat_prompt_follows_the_language_of_the_last_reply() -> None:
     asr = FakeAsr()
-    call_services, _, _, _ = services(asr=asr)
-    with TestClient(create_app(lambda _: call_services)) as client:
-        with client.websocket_connect("/ws/call") as websocket:
-            events_until(websocket, "reply_audio_end")
-            for frame in speech_then_silence():
-                websocket.send_bytes(frame)
-            events_until(websocket, "reply_audio_end")
-            asr.result = transcript(ratio=5.0)
-            for frame in speech_then_silence():
-                websocket.send_bytes(frame)
-            events = events_until(websocket, "reply_audio_end")
-    reply = next(event for event in events if isinstance(event, dict) and event["type"] == "reply")
-    assert reply["kind"] == "repeat" and reply["lang"] == "en"
+    with call(asr=asr) as websocket:
+        started(websocket)
+        websocket.send_bytes(b"\x01\x02\x03")
+        assert next_event(websocket) == {"type": "error", "code": "odd_length_frame"}
+        websocket.send_bytes(b"\x00" * (MAX_FRAME_BYTES + 2))
+        assert next_event(websocket) == {"type": "error", "code": "frame_too_large"}
+        say(websocket)
+        events_until(websocket, "reply_audio_end")
+    assert len(asr.turn_samples) == 1
 
 
-def test_a_disconnect_while_the_pipeline_runs_ends_the_call_cleanly(
+def test_too_many_bad_messages_close_the_call(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.INFO, logger="kotha")
+    with call() as websocket:
+        started(websocket)
+        for _ in range(MAX_BAD_MESSAGES + 5):
+            websocket.send_bytes(b"\x01")
+        events = events_until(websocket, "closed")
+    errors = [event for event in events if isinstance(event, dict) and event["type"] == "error"]
+    assert len(errors) == MAX_BAD_MESSAGES
+    assert errors[-1] == {"type": "error", "code": "too_many_bad_frames"}
+    rejected = [message for message in caplog.messages if "event=message_rejected" in message]
+    assert len(rejected) == MAX_BAD_MESSAGES
+
+
+def test_a_disconnect_while_the_pipeline_runs_ends_the_call_without_hanging(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     release = threading.Event()
-    call_services, _, pipeline, tts = services(pipeline=FakePipeline(release))
+    pipeline, tts = FakePipeline(release), FakeTts()
     caplog.set_level(logging.INFO, logger="kotha")
-    with TestClient(create_app(lambda _: call_services)) as client:
-        with client.websocket_connect("/ws/call") as websocket:
-            events_until(websocket, "reply_audio_end")
-            for frame in speech_then_silence():
-                websocket.send_bytes(frame)
-            assert next_event(websocket) == {"type": "speech_started"}
-            assert next_event(websocket) == {"type": "transcript", "text": QUESTION}
-        release.set()
+
+    def hang_up_mid_turn() -> None:
+        with call(pipeline=pipeline, tts=tts) as websocket:
+            started(websocket)
+            say(websocket)
+            events_until(websocket, "transcript")
+
+    assert finishes_within(10, hang_up_mid_turn)
+    release.set()
     assert pipeline.questions == [QUESTION]
     assert [text for text, _ in tts.spoken] == [GREETING["bn"]]
-    messages = [record.getMessage() for record in caplog.records]
-    assert any(message.startswith("event=call_ended") for message in messages)
+    assert any(message.startswith("event=call_ended") for message in caplog.messages)
 
 
 def test_logs_name_events_but_never_carry_the_caller_text(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    call_services, _, _, _ = services()
     caplog.set_level(logging.INFO, logger="kotha")
-    with TestClient(create_app(lambda _: call_services)) as client:
-        with client.websocket_connect("/ws/call") as websocket:
-            events_until(websocket, "reply_audio_end")
-            for frame in speech_then_silence():
-                websocket.send_bytes(frame)
-            events_until(websocket, "reply_audio_end")
-    messages = " ".join(record.getMessage() for record in caplog.records)
-    assert "event=call_started" in messages and "event=reply" in messages
-    assert "kind=answer" in messages
+    with call() as websocket:
+        started(websocket)
+        say(websocket)
+        events_until(websocket, "reply_audio_end")
+    messages = " ".join(caplog.messages)
+    assert "event=call_started" in messages and "kind=answer" in messages
     assert "SIM" not in messages and "service centre" not in messages
-
-
-def test_handoff_reason_reaches_the_client() -> None:
-    class HandoffPipeline(FakePipeline):
-        def reply(self, question: str) -> BotReply:
-            return BotReply(ReplyKind.HANDOFF, "bn", "এজেন্ট", (), HandoffReason.NO_ANSWER)
-
-    call_services = CallServices(lambda: loud_probability, FakeAsr(), HandoffPipeline(), FakeTts())
-    with TestClient(create_app(lambda _: call_services)) as client:
-        with client.websocket_connect("/ws/call") as websocket:
-            events_until(websocket, "reply_audio_end")
-            for frame in speech_then_silence():
-                websocket.send_bytes(frame)
-            events = events_until(websocket, "reply_audio_end")
-    reply = next(event for event in events if isinstance(event, dict) and event["type"] == "reply")
-    assert reply["kind"] == "handoff" and reply["handoff_reason"] == "no_answer"

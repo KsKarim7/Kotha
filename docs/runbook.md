@@ -322,22 +322,24 @@ cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
 
 ## Running the app
 
-The app serves the browser call on `/ws/call` (protocol in `docs/ARCHITECTURE.md`). It needs the
+The app serves the browser call on `/v1/calls/stream` (protocol in `docs/ARCHITECTURE.md`). It needs the
 database with the knowledge base ingested, bge-m3, the MMS voices, a converted Whisper model and
 the Gemini key in `.env` (see the sections above):
 
 ```bash
 cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
   && KOTHA_ASR_MODEL=models/bn-tugstugi-medium-ct2 HF_HUB_OFFLINE=1 \
-  uv run uvicorn kotha.api.app:app --host 127.0.0.1 --port 8000
+  uv run uvicorn kotha.api.app:app --host 127.0.0.1 --port 8000 --ws-max-size 65536
 ```
 
 - `KOTHA_ASR_MODEL` is required: a faster-whisper model name or a local CTranslate2 folder.
   `KOTHA_ASR_DEVICE` defaults to `cpu`; use `cuda` only after the GPU check above.
+- `--ws-max-size 65536` keeps uvicorn from buffering frames far larger than the one-second limit
+  the app enforces (32,000 bytes).
 - Startup loads every model and synthesises the fixed prompts; it is ready when uvicorn prints
-  "Application startup complete". On the CPU this takes about a minute.
-- The first answer of a fresh process is much slower than later ones (in one run, about 47 s
-  against about 2 s), because retrieval and the LLM warm up on first use.
+  "Application startup complete".
+- The first answer of a fresh process is much slower than later ones, because retrieval and the
+  LLM warm up on first use.
 - Logs carry only event names, call ids, reply kinds, languages and error codes; never what the
   caller or the bot said.
 

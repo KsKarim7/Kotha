@@ -123,6 +123,7 @@ class HandoffReason(StrEnum):
     LLM_FAILED = "llm_failed"
     RETRIEVAL_FAILED = "retrieval_failed"
     NO_TIME_TO_RETRY = "no_time_to_retry"
+    FAILED_TURNS = "failed_turns"
 
 
 class Rejection(StrEnum):

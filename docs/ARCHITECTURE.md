@@ -155,59 +155,79 @@ text a voice receives must contain only characters it knows.
   and gives one float32 array at 16 kHz per sentence. `speak` is an async iterator that runs one
   worker-thread call (`asyncio.to_thread`) per sentence, never on the event loop, so the first
   sentence can play before the rest is ready, and a cancelled reply stops after the sentence in
-  progress. `load_tts_service` blocks for about 15 s while it loads both voices and warms the
-  cache, so the app must call it in a worker thread at startup. The greeting and the fixed
-  replies (handoff, "please repeat", "not available yet") are synthesised once at start and
-  served from a read-only cache; answers are not cached.
+  progress. `load_tts_service` blocks while it loads both voices and warms the cache, so the app
+  must call it in a worker thread at startup. The greeting and the fixed replies (handoff,
+  "please repeat", "not available yet") are synthesised once at start and served from a
+  read-only cache; answers are not cached. `to_telephony_rate` resamples to 8 kHz for the phone
+  path.
 
 ## Browser call: WebSocket protocol
 
-The app (`kotha.api.app`, FastAPI) serves one WebSocket endpoint, `/ws/call`. One connection is
-one call.
+The app (`kotha.api.app`, FastAPI) serves the blueprint's endpoint, `/v1/calls/stream`. One
+connection is one call. Messages are Pydantic models in `kotha.api.protocol`.
 
-**Client to server.** Binary frames only, each holding PCM16 little-endian mono samples at
-16 kHz, of any length up to one second (32,000 bytes). A frame may split a sample window; the
-server buffers the remainder. Closing the socket ends the call.
+**Client to server.**
 
-**Server to client.** JSON text frames for events (Pydantic models in `kotha.api.protocol`) and
-binary frames for the bot's audio, in the same PCM16 mono 16 kHz format.
+- JSON `{"type":"start","sample_rate":16000,"consent":true}` starts the call. `consent` is the
+  caller's agreement that their speech is transcribed and their question is sent to the LLM;
+  without it the server sends `error` `consent_required` and closes. Audio sent before `start`
+  is refused with `not_started` and never reaches the models.
+- Binary frames of PCM16 little-endian mono samples at 16 kHz. The blueprint's frame is 20 ms
+  (640 bytes); the server accepts any even length up to one second (32,000 bytes) and buffers a
+  remainder that does not fill a 32 ms VAD window.
+- JSON `{"type":"stop"}`, or closing the socket, ends the call.
+
+**Server to client.** JSON events and binary frames of the bot's audio in the same PCM16 format.
 
 | Event | When | Fields |
 | --- | --- | --- |
-| `ready` | first message of every call | `sample_rate` (16000), `audio_format` (`pcm16le_mono`) |
-| `speech_started` | the turn detector has confirmed speech | none |
-| `transcript` | a turn passed ASR and the gate | `text` |
-| `reply` | before the bot speaks | `kind` (`greeting`, `answer`, `account_unavailable`, `handoff`, `repeat`), `lang`, `text`, `sources` (`doc_id`, `title`, one per document), `handoff_reason` |
-| `reply_audio_end` | after the last audio frame of a reply | none |
-| `error` | a frame was refused; the call goes on | `code` (`text_frame_ignored`, `odd_length_frame`, `frame_too_large`) |
+| `ready` | on connect, before `start` (an addition to the blueprint) | `sample_rate`, `audio_format` |
+| `vad` | the turn detector confirmed speech, or ended a turn | `event`: `speech_start` or `speech_end` |
+| `transcript` | a turn passed ASR and the gate | `text`, `final` (always true in MS1) |
+| `bot_text` | before the bot speaks | `kind` (`greeting`, `answer`, `account_unavailable`, `handoff`, `repeat`), `lang`, `text`, `citations` (`doc_id`, `title`, one per document) |
+| `reply_audio_end` | after the last audio frame of a reply (an addition) | none |
+| `handoff` | after a handoff reply has been spoken | `reason`; the blueprint's summary comes with M6-full |
+| `error` | a message was refused or TTS failed | `code` |
+| `playback_stop` | not sent in MS1; it belongs to barge-in (MS2) | |
 
-Every reply is one `reply` event, then one binary frame per sentence, then `reply_audio_end`.
-The call starts with `ready` and the Bangla greeting.
+Every reply is one `bot_text`, then one binary frame per sentence, then `reply_audio_end`. Error
+codes: `bad_control_message`, `not_started`, `already_started`, `consent_required`,
+`odd_length_frame`, `frame_too_large`, `too_many_bad_frames` (after 20 refused messages the call
+is closed), `tts_failed` (the text was sent but the audio stopped).
 
 ## Browser call: the call loop
 
 `kotha.api.session.CallSession` runs one anyio task group per call with three tasks:
 
-- **Receive loop.** Reads frames, refuses malformed ones with an `error` event, converts PCM16 to
-  float32, and runs Silero and the turn detector on whole 32 ms windows in a worker thread.
-  `speech_started` goes to the client; a finished turn (`SpeechEnded`) goes to the turn queue.
-  Only audio the turn detector has accepted as speech ever reaches ASR.
-- **Turn handler.** Speaks the greeting, then takes one turn at a time: ASR in a worker thread,
-  then the gate. A transcript that is empty, has a compression ratio above 2.4 or a segment at
-  Whisper's 224-token ceiling (ADR 0005) gets the fixed "please repeat" reply in the call's
-  current language, without the answer pipeline. Otherwise the transcript goes to the client and
-  to `AnswerPipeline.reply` in a worker thread, and the reply is spoken sentence by sentence
-  through `TtsService.speak`.
-- **Send loop.** The only task that writes to the socket, so events and audio never interleave
-  mid-frame.
+- **Receive loop.** Reads messages, handles `start` and `stop`, refuses malformed ones with an
+  `error` event, converts PCM16 to float32, and runs Silero and the turn detector on whole 32 ms
+  windows in a worker thread. The detector cuts a turn at 30 s, so a monologue cannot grow
+  without limit. Only audio the turn detector has accepted as speech ever reaches ASR.
+- **Turn handler.** Waits for `start`, speaks the greeting, then takes one turn at a time: ASR
+  in a worker thread, then the gate. A turn fails when ASR raises, or the transcript is empty,
+  has a compression ratio above 2.4 or a segment at Whisper's 224-token ceiling (ADR 0005). The
+  first failed turn gets "please repeat" in the call's current language; a second failed turn
+  in a row gets the handoff reply and a `handoff` event (FR-10). A good turn goes to the client
+  as `transcript` and to `AnswerPipeline.reply` in a worker thread, and the reply is spoken
+  sentence by sentence through `TtsService.speak`. If TTS fails mid-reply, the client gets
+  `tts_failed` and the reply still ends with `reply_audio_end`.
+- **Send loop.** The only task that writes to the socket, so events and audio never interleave.
+  It also closes the socket after `stop`, a refused consent or too many bad messages.
 
-A disconnect ends the receive loop, which ends the task group and cancels the other two tasks.
-Work already running in a worker thread finishes in the background and its result is dropped.
-The task group is anyio's, not `asyncio.TaskGroup`, because Starlette cancels through anyio
-cancel scopes (ADR 0010).
+A disconnect ends the receive or send loop, which ends the task group and cancels the other
+tasks. Work already running in a worker thread finishes in the background and its result is
+dropped. The task group is anyio's, not `asyncio.TaskGroup` (ADR 0010).
 
-MS1 has no barge-in: turns that arrive while the bot speaks wait in the queue and are answered in
-order. The browser's echo cancellation keeps the bot's own voice out of the microphone.
+Both queues are bounded. The outgoing queue holds 64 items, so a client that stops reading slows
+the call down instead of filling memory. MS1 has no barge-in, so at most one turn waits while the
+bot is busy; a further turn is dropped and logged. The browser's echo cancellation keeps the
+bot's own voice out of the microphone.
 
-Logs go through `kotha.logs.log_event`, which accepts only allow-listed field names and short
-tokens as string values, so a transcript, phone number or PIN cannot be logged by mistake. `to_telephony_rate` resamples to 8 kHz for the phone path.
+Silero, ASR, the pipeline and TTS all share the default `asyncio.to_thread` pool. Under several
+concurrent calls, a long LLM call or an abandoned thread can delay another call's VAD step; M8-3
+measures one call at a time.
+
+Logs go through `kotha.logs.log_event`, which accepts only allow-listed field names, and string
+values only as short tokens that start with a letter. This keeps transcripts and plain phone
+numbers out of the logs; it cannot judge what a number in an allowed numeric field means, so
+callers must only pass counts and timings there.
