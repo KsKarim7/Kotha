@@ -51,9 +51,11 @@ shows how to start PostgreSQL with Docker and run them.
 
 ## Run the stack
 
-Prerequisites: Docker, a Gemini API key, and the models in place (bge-m3 and the MMS voices in the
-Hugging Face cache, a converted Whisper model in `models/`; `docs/runbook.md` has the one-time
-download commands).
+Prerequisites: Docker, uv, a Gemini API key, and the models in place before the first start:
+bge-m3 and the MMS voices in the Hugging Face cache and a converted Whisper model in `models/`.
+The one-time download and conversion commands are in `docs/runbook.md` and run with `uv run`, so
+run `uv sync` first. Create `models/` yourself before starting compose; otherwise Docker creates
+it owned by root and the conversion cannot write into it.
 
 ```bash
 cp .env.example .env                                     # then fill in the key and a password

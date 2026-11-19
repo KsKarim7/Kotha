@@ -28,7 +28,8 @@ def test_the_app_reaches_the_database_service_and_listens_on_localhost_only() ->
 
 
 def test_models_are_mounted_read_only_and_health_waits_for_readiness() -> None:
-    assert ":/root/.cache/huggingface:ro" in COMPOSE
+    assert ":/root/.cache/huggingface/hub:ro" in COMPOSE
+    assert "huggingface}:/root/.cache/huggingface:ro" not in COMPOSE
     assert "./models:/app/models:ro" in COMPOSE
     assert "/v1/ready" in COMPOSE
     assert "GEMINI_API_KEY: ${GEMINI_API_KEY}" in COMPOSE

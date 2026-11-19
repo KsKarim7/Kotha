@@ -216,6 +216,10 @@ before the down-sampling, so energy above 8 kHz can fold into the band; speech c
 there. Bot audio is played back in arrival order at 16 kHz. The transcript panel shows the
 caller's transcript and each bot reply with the titles of its cited documents. End sends `stop`.
 
+**Deployment (MS1).** `docker compose` runs two containers on one host: `db` (PostgreSQL 16 with
+pgvector) and `app` (this FastAPI app, CPU-only, models read from read-only mounts). Both ports are
+bound to `127.0.0.1`; the app reaches the database at host `db`.
+
 ## Browser call: the call loop
 
 `kotha.api.session.CallSession` runs one anyio task group per call with three tasks:
