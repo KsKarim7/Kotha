@@ -1,12 +1,34 @@
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, TypeAdapter
 
 from kotha.audio.convert import SAMPLE_RATE_HZ
+from kotha.dialogue.answer import HandoffReason, ReplyKind
 from kotha.dialogue.routing import Language
 
-ReplyEventKind = Literal["greeting", "answer", "account_unavailable", "handoff", "repeat"]
-ErrorCode = Literal["text_frame_ignored", "odd_length_frame", "frame_too_large"]
+ErrorCode = Literal[
+    "bad_control_message",
+    "not_started",
+    "already_started",
+    "consent_required",
+    "odd_length_frame",
+    "frame_too_large",
+    "too_many_bad_frames",
+    "tts_failed",
+]
+
+
+class Start(BaseModel):
+    type: Literal["start"]
+    sample_rate: Literal[16000]
+    consent: bool
+
+
+class Stop(BaseModel):
+    type: Literal["stop"]
+
+
+CLIENT_MESSAGE = TypeAdapter(Annotated[Start | Stop, Field(discriminator="type")])
 
 
 class Ready(BaseModel):
@@ -15,27 +37,33 @@ class Ready(BaseModel):
     audio_format: Literal["pcm16le_mono"] = "pcm16le_mono"
 
 
-class SpeechStarted(BaseModel):
-    type: Literal["speech_started"] = "speech_started"
+class Vad(BaseModel):
+    type: Literal["vad"] = "vad"
+    event: Literal["speech_start", "speech_end"]
 
 
 class TranscriptEvent(BaseModel):
     type: Literal["transcript"] = "transcript"
     text: str
+    final: bool = True
 
 
-class SourceEvent(BaseModel):
+class Citation(BaseModel):
     doc_id: str
     title: str
 
 
-class ReplyEvent(BaseModel):
-    type: Literal["reply"] = "reply"
-    kind: ReplyEventKind
+class BotText(BaseModel):
+    type: Literal["bot_text"] = "bot_text"
+    kind: ReplyKind | Literal["greeting"]
     lang: Language
     text: str
-    sources: list[SourceEvent] = []
-    handoff_reason: str | None = None
+    citations: list[Citation] = []
+
+
+class Handoff(BaseModel):
+    type: Literal["handoff"] = "handoff"
+    reason: HandoffReason
 
 
 class ReplyAudioEnd(BaseModel):
@@ -47,4 +75,4 @@ class ErrorEvent(BaseModel):
     code: ErrorCode
 
 
-ServerEvent = Ready | SpeechStarted | TranscriptEvent | ReplyEvent | ReplyAudioEnd | ErrorEvent
+ServerEvent = Ready | Vad | TranscriptEvent | BotText | Handoff | ReplyAudioEnd | ErrorEvent

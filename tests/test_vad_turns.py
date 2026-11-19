@@ -125,6 +125,24 @@ def test_hangover_ends_on_the_last_silent_window(hangover_ms: int, end_push: int
     ]
 
 
+def test_a_monologue_is_cut_at_the_maximum_turn_length_and_a_new_turn_follows() -> None:
+    probabilities = [0.0] * 15 + [0.9] * 70 + [0.0] * 40
+    detector = TurnDetector(FakeProbability(probabilities), max_turn_ms=1_000)
+    events = [detector.push(window(index)) for index in range(len(probabilities))]
+    turns = [event for event in events if isinstance(event, SpeechEnded)]
+    max_windows = -(-1_000 * 16 // WINDOW_SAMPLES)
+    assert len(turns[0].audio) == max_windows * WINDOW_SAMPLES
+    assert len(turns) == 3
+    assert all(len(turn.audio) <= max_windows * WINDOW_SAMPLES for turn in turns)
+    assert turns[1].start_sample == turns[0].end_sample
+    assert turns[1].audio[0] == turns[0].end_sample // WINDOW_SAMPLES
+
+
+def test_max_turn_must_be_longer_than_min_speech() -> None:
+    with pytest.raises(ValueError, match="max_turn_ms"):
+        TurnDetector(FakeProbability([0.0]), min_speech_ms=250, max_turn_ms=250)
+
+
 def test_two_utterances_have_separate_audio() -> None:
     probabilities = [0.0] * 15 + [0.9] * 10 + [0.0] * 30 + [0.9] * 12 + [0.0] * 30
     detector = TurnDetector(FakeProbability(probabilities))

@@ -21,7 +21,7 @@ def create_app(load_services: ServiceLoader) -> FastAPI:
 
     app = FastAPI(title="Kotha", lifespan=lifespan)
 
-    @app.websocket("/ws/call")
+    @app.websocket("/v1/calls/stream")
     async def call(websocket: WebSocket) -> None:
         await CallSession(websocket, websocket.app.state.services).run()
 
