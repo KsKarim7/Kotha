@@ -18,7 +18,7 @@ from pathlib import Path
 
 import numpy as np
 from websockets.asyncio.client import ClientConnection, connect
-from websockets.exceptions import ConnectionClosed
+from websockets.exceptions import ConnectionClosed, InvalidHandshake
 
 from kotha.api.protocol import Readiness
 from kotha.audio.convert import SAMPLE_RATE_HZ, float_to_pcm16
@@ -39,6 +39,7 @@ AUDIBLE_FRACTION = 0.01
 TURN_TIMEOUT_SECONDS = 120.0
 READY_TIMEOUT_SECONDS = 600.0
 SERVER_EXIT_SECONDS = 60.0
+MIN_COUNTED_TURNS = 30
 SERVER_STAGES = ("asr", "retrieval", "llm", "tts_first_audio")
 STAGES = ("vad", *SERVER_STAGES, "ttfa", "ttfa_from_vad")
 RESULT_COLUMNS = ("question_id", "lang", "kind", "split", "failure", *STAGES)
@@ -170,8 +171,10 @@ async def measure_turn(url: str, question: Question, clip: np.ndarray) -> TurnRe
         result.failure = "timeout"
     except ConnectionClosed:
         result.failure = "connection_closed"
-    except OSError:
+    except (OSError, InvalidHandshake):
         result.failure = "connect_failed"
+    except (json.JSONDecodeError, KeyError):
+        result.failure = "bad_event"
     return result
 
 
@@ -241,17 +244,18 @@ def print_summary(summary: Mapping[str, tuple[int, float, float]]) -> None:
 
 async def measure_all(
     url: str, questions: Sequence[Question], clips: Sequence[np.ndarray]
-) -> list[TurnResult]:
-    # the first turn of a process pays for the LLM client's first connection, so it is not counted
+) -> tuple[TurnResult, list[TurnResult]]:
+    # the first turn of a process may still pay first-use costs, so it is measured but not counted
     warm_up = await measure_turn(url, questions[0], clips[0])
-    print(f"warm-up turn (not counted): {warm_up.kind or warm_up.failure}")
+    stages = ", ".join(f"{stage} {seconds:.2f}" for stage, seconds in warm_up.stages.items())
+    print(f"warm-up turn (not counted): {warm_up.kind or warm_up.failure}; {stages}")
     results = []
     for question, clip in zip(questions, clips, strict=True):
         result = await measure_turn(url, question, clip)
         notes = [note for note in (result.failure, "split" if result.split else "") if note]
         print(f"{question.id}: {result.kind or '-'} {' '.join(notes)}".rstrip())
         results.append(result)
-    return results
+    return warm_up, results
 
 
 def main() -> None:
@@ -265,6 +269,8 @@ def main() -> None:
     output: Path = args.output.resolve()
     if output.is_relative_to(REPO_ROOT):
         parser.error(f"--output {output} must be outside the repository")
+    if args.limit is not None and args.limit < 1:
+        parser.error("--limit must be at least 1")
     if args.launch and port_in_use(args.port):
         parser.error(f"port {args.port} is already in use; --launch needs a free port")
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -283,7 +289,7 @@ def main() -> None:
         if server is not None:
             cold_start_seconds = time.perf_counter() - launched
         url = f"ws://127.0.0.1:{args.port}/v1/calls/stream"
-        results = asyncio.run(measure_all(url, questions, clips))
+        warm_up, results = asyncio.run(measure_all(url, questions, clips))
     finally:
         if server is not None:
             stop_server(server)
@@ -295,6 +301,9 @@ def main() -> None:
     print(f"turns: {len(results)}, counted (answers, not split, not failed): ", end="")
     print(f"{sum(counted(result) for result in results)}, split: {split}")
     print(f"replies: {dict(kinds)}, failures: {dict(failed)}")
+    counted_turns = sum(counted(result) for result in results)
+    if counted_turns < MIN_COUNTED_TURNS:
+        print(f"WARNING: only {counted_turns} counted turns; the blueprint asks for at least 30")
     if cold_start_seconds is not None:
         print(f"cold start (process start to ready): {cold_start_seconds:.1f} s")
     print_summary(summary)
@@ -307,7 +316,7 @@ def main() -> None:
             for name, value in (("p50", p50), ("p95", p95))
         }
         metrics["turns"] = len(results)
-        metrics["counted_turns"] = sum(counted(result) for result in results)
+        metrics["counted_turns"] = counted_turns
         metrics["split_turns"] = split
         metrics.update({f"replies.{kind}": count for kind, count in kinds.items()})
         metrics.update({f"failures.{failure}": count for failure, count in failed.items()})
@@ -317,7 +326,7 @@ def main() -> None:
         params = {
             "testset_sha256": hashlib.sha256(TESTSET_PATH.read_bytes()).hexdigest(),
             "questions": str(len(questions)),
-            "warm_up_turns": "1",
+            "warm_up_turn": f"{warm_up.question_id} {warm_up.kind or warm_up.failure}",
             "counted": "answers only, not split, not failed",
             "asr_model": os.environ.get("KOTHA_ASR_MODEL", "unset"),
             "asr_device": os.environ.get("KOTHA_ASR_DEVICE", "cpu"),
