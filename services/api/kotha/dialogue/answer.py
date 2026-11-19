@@ -161,6 +161,7 @@ FIXED_REPLIES: dict[ReplyKind, dict[Language, str]] = {
         "en": "Sorry, I did not catch that. Could you say it again?",
     },
 }
+WARM_UP_QUESTION = "সিম হারিয়ে গেলে কী করব? How do I replace a lost SIM?"
 GREETING: dict[Language, str] = {
     "bn": "নদী টেলিকমে স্বাগতম। আমি কথা, একটি স্বয়ংক্রিয় সহকারী। কীভাবে সাহায্য করতে পারি?",
     "en": "Welcome to Nodi Telecom. I am Kotha, an automated assistant. How can I help you?",
@@ -252,6 +253,9 @@ class AnswerPipeline:
     def __init__(self, retriever: Retriever, llm: LLMClient) -> None:
         self._retriever = retriever
         self._llm = llm
+
+    def warm_up(self) -> None:
+        self._retriever.search(WARM_UP_QUESTION)
 
     def reply(self, question: str) -> BotReply:
         lang = caller_language(question)

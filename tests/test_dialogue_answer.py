@@ -7,6 +7,7 @@ from kotha.dialogue import answer as answer_module
 from kotha.dialogue.answer import (
     FIXED_REPLIES,
     SYSTEM_PROMPT,
+    WARM_UP_QUESTION,
     AnswerPipeline,
     HandoffReason,
     Rejection,
@@ -52,6 +53,13 @@ def pipeline_for(
     llm = FakeLLMClient(replies)
     retriever = StaticRetriever(chunk_ids)
     return AnswerPipeline(retriever, llm), llm, retriever
+
+
+def test_warm_up_runs_one_search_and_never_calls_the_llm() -> None:
+    pipeline, llm, retriever = pipeline_for([])
+    pipeline.warm_up()
+    assert retriever.queries == [WARM_UP_QUESTION]
+    assert llm.calls == []
 
 
 def test_a_cited_answer_is_returned_without_markers_and_with_its_sources() -> None:
