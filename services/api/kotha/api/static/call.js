@@ -73,7 +73,9 @@ async function waitUntilReady(pending) {
         return;
       }
     } catch (error) {
-      status.textContent = "Waiting for the server…";
+      if (!pending.ended) {
+        status.textContent = "Waiting for the server…";
+      }
     }
     await new Promise((resolve) => setTimeout(resolve, READY_POLL_MS));
   }
@@ -235,8 +237,9 @@ function updateButtons() {
 }
 
 function showFailure(pending, error) {
+  const cancelled = pending.ended || error instanceof Cancelled;
   release(pending);
-  if (!(error instanceof Cancelled) && current === null) {
-    status.textContent = `Could not start the call: ${error.message}`;
+  if (current === null) {
+    status.textContent = cancelled ? "Call cancelled." : `Could not start the call: ${error.message}`;
   }
 }
