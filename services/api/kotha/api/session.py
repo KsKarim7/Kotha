@@ -2,7 +2,7 @@ import asyncio
 import secrets
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
-from typing import Final, Protocol
+from typing import Protocol
 
 import anyio
 import numpy as np
@@ -47,7 +47,15 @@ FAILED_TURNS_BEFORE_HANDOFF = 2
 OUTGOING_LIMIT = 64
 GREETING_LANG: Language = "bn"
 MODEL_ERRORS = (RuntimeError, ValueError)
-CLOSE: Final = object()
+POLICY_VIOLATION = 1008
+
+
+@dataclass(frozen=True)
+class Close:
+    code: int = 1000
+
+
+Outgoing = ServerEvent | bytes | Close
 
 
 class Transcriber(Protocol):
@@ -102,14 +110,11 @@ class CallSession:
     def __init__(self, websocket: WebSocket, services: CallServices) -> None:
         self._websocket = websocket
         self._services = services
-        self._detector: vad_turns.TurnDetector | None = None
         self._unwindowed = np.zeros(0, dtype=np.float32)
         self._started = asyncio.Event()
         # one waiting turn at most: without barge-in, older speech would be answered too late
         self._turns: asyncio.Queue[np.ndarray] = asyncio.Queue(maxsize=1)
-        self._outgoing: asyncio.Queue[ServerEvent | bytes | object] = asyncio.Queue(
-            maxsize=OUTGOING_LIMIT
-        )
+        self._outgoing: asyncio.Queue[Outgoing] = asyncio.Queue(maxsize=OUTGOING_LIMIT)
         self._bad_messages = 0
         self._failed_turns = 0
         self._lang: Language = GREETING_LANG
@@ -121,9 +126,9 @@ class CallSession:
         await self._outgoing.put(Ready())
         # anyio, not asyncio.TaskGroup, so Starlette's cancel scopes can end the call cleanly
         try:
-            self._detector = await asyncio.to_thread(self._new_detector)
+            detector = await asyncio.to_thread(self._new_detector)
             async with anyio.create_task_group() as group:
-                group.start_soon(self._receive)
+                group.start_soon(self._receive, detector)
                 group.start_soon(self._handle_turns)
                 group.start_soon(self._send)
         except* CallEnded:
@@ -134,20 +139,21 @@ class CallSession:
     def _new_detector(self) -> vad_turns.TurnDetector:
         return vad_turns.TurnDetector(self._services.new_vad())
 
-    async def _receive(self) -> None:
+    async def _receive(self, detector: vad_turns.TurnDetector) -> None:
         while True:
             message = await self._websocket.receive()
             if message["type"] == "websocket.disconnect":
                 raise CallEnded
-            text, frame = message.get("text"), message.get("bytes")
-            if text is not None:
-                await self._control(text)
-            elif not self._started.is_set():
+            if message.get("text") is not None:
+                await self._control(message["text"])
+                continue
+            frame: bytes = message.get("bytes") or b""
+            if not self._started.is_set():
                 await self._reject("not_started")
-            elif (error := frame_error(frame or b"")) is not None:
+            elif (error := frame_error(frame)) is not None:
                 await self._reject(error)
             else:
-                await self._listen(pcm16_to_float(frame or b""))
+                await self._listen(detector, pcm16_to_float(frame))
 
     async def _control(self, text: str) -> None:
         try:
@@ -156,17 +162,17 @@ class CallSession:
             await self._reject("bad_control_message")
             return
         if not isinstance(message, Start):
-            await self._outgoing.put(CLOSE)
+            await self._outgoing.put(Close())
         elif not message.consent:
             await self._outgoing.put(ErrorEvent(code="consent_required"))
-            await self._outgoing.put(CLOSE)
+            await self._outgoing.put(Close(POLICY_VIOLATION))
         elif self._started.is_set():
             await self._reject("already_started")
         else:
             self._started.set()
 
-    async def _listen(self, samples: np.ndarray) -> None:
-        for event in await asyncio.to_thread(self._detect, samples):
+    async def _listen(self, detector: vad_turns.TurnDetector, samples: np.ndarray) -> None:
+        for event in await asyncio.to_thread(self._detect, detector, samples):
             if isinstance(event, vad_turns.SpeechStarted):
                 await self._outgoing.put(Vad(event="speech_start"))
                 continue
@@ -183,18 +189,18 @@ class CallSession:
         log_event("message_rejected", call_id=self.call_id, error=error)
         if self._bad_messages == MAX_BAD_MESSAGES:
             await self._outgoing.put(ErrorEvent(code="too_many_bad_frames"))
-            await self._outgoing.put(CLOSE)
+            await self._outgoing.put(Close(POLICY_VIOLATION))
         else:
             await self._outgoing.put(ErrorEvent(code=error))
 
-    def _detect(self, samples: np.ndarray) -> list[vad_turns.SpeechStarted | vad_turns.SpeechEnded]:
-        if self._detector is None:
-            raise RuntimeError("the turn detector is created before frames are read")
+    def _detect(
+        self, detector: vad_turns.TurnDetector, samples: np.ndarray
+    ) -> list[vad_turns.SpeechStarted | vad_turns.SpeechEnded]:
         audio = np.concatenate([self._unwindowed, samples])
         whole = len(audio) - len(audio) % WINDOW_SAMPLES
         self._unwindowed = audio[whole:]
         events = (
-            self._detector.push(audio[start : start + WINDOW_SAMPLES])
+            detector.push(audio[start : start + WINDOW_SAMPLES])
             for start in range(0, whole, WINDOW_SAMPLES)
         )
         return [event for event in events if event is not None]
@@ -215,9 +221,9 @@ class CallSession:
 
     async def _answer(self, turn_audio: np.ndarray) -> None:
         transcript = await self._transcribe(turn_audio)
-        reason = "asr_error" if transcript is None else unusable_reason(transcript)
-        if transcript is None or reason is not None:
-            log_event("turn_failed", call_id=self.call_id, reason=reason or "asr_error")
+        failure = "asr_error" if transcript is None else unusable_reason(transcript)
+        if failure is not None or transcript is None:
+            log_event("turn_failed", call_id=self.call_id, reason=failure or "asr_error")
             reply = self._failed_turn_reply()
         else:
             self._failed_turns = 0
@@ -232,6 +238,7 @@ class CallSession:
     def _failed_turn_reply(self) -> BotReply:
         self._failed_turns += 1
         if self._failed_turns >= FAILED_TURNS_BEFORE_HANDOFF:
+            self._failed_turns = 0
             return handoff(self._lang, HandoffReason.FAILED_TURNS)
         return fixed_reply(ReplyKind.REPEAT, self._lang)
 
@@ -249,12 +256,12 @@ class CallSession:
         while True:
             item = await self._outgoing.get()
             try:
-                if item is CLOSE:
-                    await self._websocket.close()
+                if isinstance(item, Close):
+                    await self._websocket.close(item.code)
                     raise CallEnded
                 if isinstance(item, bytes):
                     await self._websocket.send_bytes(item)
-                elif isinstance(item, ServerEvent):
+                else:
                     await self._websocket.send_text(item.model_dump_json())
             except WebSocketDisconnect as disconnect:
                 raise CallEnded from disconnect

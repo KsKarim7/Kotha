@@ -283,6 +283,16 @@ def test_an_asr_error_is_answered_and_two_failed_turns_hand_off() -> None:
     assert types(second_turn)[-2:] == ["reply_audio_end", "handoff"]
 
 
+def test_the_failed_turn_count_starts_again_after_a_handoff() -> None:
+    with call(asr=FakeAsr(transcript(ratio=5.0))) as websocket:
+        started(websocket)
+        kinds = []
+        for _ in range(3):
+            say(websocket)
+            kinds.append(first(events_until(websocket, "reply_audio_end"), "bot_text")["kind"])
+    assert kinds == ["repeat", "handoff", "repeat"]
+
+
 def test_a_good_turn_resets_the_failed_turn_count() -> None:
     asr = FakeAsr(transcript(ratio=5.0))
     with call(asr=asr) as websocket:
@@ -385,7 +395,7 @@ def test_start_without_consent_ends_the_call() -> None:
     with call(tts=tts) as websocket:
         websocket.send_text(json.dumps({**START, "consent": False}))
         assert next_event(websocket) == {"type": "error", "code": "consent_required"}
-        assert next_event(websocket)["type"] == "closed"  # type: ignore[index]
+        assert next_event(websocket) == {"type": "closed", "code": 1008}
     assert tts.spoken == []
 
 
@@ -393,7 +403,7 @@ def test_stop_ends_the_call() -> None:
     with call() as websocket:
         started(websocket)
         websocket.send_text(json.dumps({"type": "stop"}))
-        assert next_event(websocket)["type"] == "closed"  # type: ignore[index]
+        assert next_event(websocket) == {"type": "closed", "code": 1000}
 
 
 @pytest.mark.parametrize(
@@ -426,6 +436,7 @@ def test_too_many_bad_messages_close_the_call(caplog: pytest.LogCaptureFixture) 
         for _ in range(MAX_BAD_MESSAGES + 5):
             websocket.send_bytes(b"\x01")
         events = events_until(websocket, "closed")
+    assert events[-1] == {"type": "closed", "code": 1008}
     errors = [event for event in events if isinstance(event, dict) and event["type"] == "error"]
     assert len(errors) == MAX_BAD_MESSAGES
     assert errors[-1] == {"type": "error", "code": "too_many_bad_frames"}

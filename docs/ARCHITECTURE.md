@@ -220,8 +220,12 @@ dropped. The task group is anyio's, not `asyncio.TaskGroup` (ADR 0010).
 
 Both queues are bounded. The outgoing queue holds 64 items, so a client that stops reading slows
 the call down instead of filling memory. MS1 has no barge-in, so at most one turn waits while the
-bot is busy; a further turn is dropped and logged. The browser's echo cancellation keeps the
-bot's own voice out of the microphone.
+bot is busy; a further turn is dropped and logged, and the caller gets its `vad` events but no
+reply. The browser's echo cancellation keeps the bot's own voice out of the microphone. The limit
+of 20 refused messages counts over the whole call, including audio sent before `start`, so a
+client should send `start` before it opens the microphone. Closing after a refused consent or too
+many refused messages uses code 1008 (policy violation); `stop` closes with 1000. After a handoff
+for failed turns the count starts again, so the call goes on if the caller keeps talking.
 
 Silero, ASR, the pipeline and TTS all share the default `asyncio.to_thread` pool. Under several
 concurrent calls, a long LLM call or an abandoned thread can delay another call's VAD step; M8-3
