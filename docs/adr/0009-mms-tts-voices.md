@@ -26,13 +26,21 @@ numbered sources are under References.
   য়, ড় or ঢ়, only the nukta ় [1]. `mms-tts-eng` has a-z, the ASCII digits 0-6 (not 7, 8 or 9),
   space, `'`, `-`, `_` and `–` [2]. NFC writes য়, ড় and ঢ় as base letter plus nukta (checked
   with `unicodedata` in Python 3.11), which is inside the Bangla vocabulary.
+- **Blank token.** With `add_blank: true` the tokenizer puts id 0 between every pair of characters
+  [4], and id 0 is also a vocabulary character: `6` in Bangla and `k` in English (the
+  `pad_token`). Checked with the installed tokenizers: `the pack` encodes its `k` as 0, and
+  `দিন 6 দিন` encodes `6` as 0. So `6` and `k` reach the model only as blanks. Whisper still heard
+  "pack" and "Ask" in the English clips, so the English model may cope with this; it is not
+  confirmed by listening.
 
 ### What the probe showed
 `eval/tts_probe.py` synthesised 15 fixed sentences (9 bn, 6 en) at seed 0 on the CPU and printed
 what each tokenizer keeps. As a rough hint at what the audio sounds like, it transcribed each clip
-back with faster-whisper: `models/bn-tugstugi-medium-ct2` for Bangla and `medium` for English.
-Nobody has listened to the clips yet, and an ASR transcript is not a pronunciation score; the
-Bangla ASR also "repairs" words from its language model.
+back with faster-whisper. The probe takes one `--asr-model` for all clips, so it ran twice; the
+table takes the Bangla "heard" column from the run with `models/bn-tugstugi-medium-ct2` and the
+English one from the run with `medium` (the runbook has both commands). Nobody has listened to the
+clips yet, and an ASR transcript is not a pronunciation score; the Bangla ASR also "repairs" words
+from its language model.
 
 | Input | What the tokenizer keeps | What ASR heard |
 | --- | --- | --- |
@@ -51,8 +59,9 @@ Bangla ASR also "repairs" words from its language model.
 
 So, on these sentences: Latin words in Bangla text and Bengali digits are not spoken at all;
 ASCII digits are kept but did not come back as numbers in either language; numbers written as
-words came back as words; a precomposed য় loses a syllable; codes like `*747#` lose their symbols
-and, in English, their 7s. Loanwords written in Bangla script (`এনআইডি`, `অ্যাপ`) came back
+words came back as words; the tokenizer removes a precomposed য় (`মেয়াদ` becomes `মোদ`), which
+listening has not yet confirmed in the audio; codes like `*747#` lose their symbols and, in English,
+their 7s. Loanwords written in Bangla script (`এনআইডি`, `অ্যাপ`) came back
 garbled, so they need the listening test before we rely on them.
 
 ## Decision
@@ -61,9 +70,10 @@ through transformers' `VitsModel`, at the pinned revisions above, from `model.sa
 loaded offline (`local_files_only=True`, `DISABLE_SAFETENSORS_CONVERSION=true`), on the CPU, with a
 fixed seed. Each voice gets only text that is entirely inside its own vocabulary: the speakable-text
 step (M7-2) writes numbers as words, codes symbol by symbol in words, Latin terms in Bangla script
-for the Bangla voice and the brand in Latin for the English voice, and applies NFC. The TTS service
-(M7-3) treats any character its tokenizer would drop as a bug that tests catch, not something to
-pass to the model.
+for the Bangla voice and the brand in Latin for the English voice, and applies NFC. No digit reaches
+either voice, which also keeps the Bangla `6` blank out of the input. The TTS service (M7-3) treats
+any character its tokenizer would drop as a bug that tests catch, not something to pass to the
+model.
 
 The status stays "proposed" until the listening sheet (M7-3) is rated and RTF comes from a
 committed run.
@@ -85,8 +95,8 @@ committed run.
 - The dialogue keeps digits (the verifier in `kotha.rag.citations` checks them) and only the TTS
   input turns them into words.
 - About 277 MiB of weights for both voices; they load once per process.
-- To watch: Bangla loanword pronunciation, and how often a reply needs the other language's voice
-  for a single word.
+- To watch: Bangla loanword pronunciation, English words with `k` (sent as blanks), and how often a
+  reply needs the other language's voice for a single word.
 
 ## References
 1. Hugging Face model repo `facebook/mms-tts-ben` at `0da99de6`, read through `huggingface_hub`
