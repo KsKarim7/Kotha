@@ -320,6 +320,27 @@ cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
   Khaled reviews them. Change a question only to fix its wording or its gold document, never
   because of how it scored, and rerun the evaluation after any change.
 
+## Running the app
+
+The app serves the browser call on `/ws/call` (protocol in `docs/ARCHITECTURE.md`). It needs the
+database with the knowledge base ingested, bge-m3, the MMS voices, a converted Whisper model and
+the Gemini key in `.env` (see the sections above):
+
+```bash
+cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
+  && KOTHA_ASR_MODEL=models/bn-tugstugi-medium-ct2 HF_HUB_OFFLINE=1 \
+  uv run uvicorn kotha.api.app:app --host 127.0.0.1 --port 8000
+```
+
+- `KOTHA_ASR_MODEL` is required: a faster-whisper model name or a local CTranslate2 folder.
+  `KOTHA_ASR_DEVICE` defaults to `cpu`; use `cuda` only after the GPU check above.
+- Startup loads every model and synthesises the fixed prompts; it is ready when uvicorn prints
+  "Application startup complete". On the CPU this takes about a minute.
+- The first answer of a fresh process is much slower than later ones (in one run, about 47 s
+  against about 2 s), because retrieval and the LLM warm up on first use.
+- Logs carry only event names, call ids, reply kinds, languages and error codes; never what the
+  caller or the bot said.
+
 ## Text chat and scenarios
 
 Both commands run the real answer pipeline (ADR 0008): hybrid retrieval over the database, bge-m3

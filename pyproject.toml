@@ -3,6 +3,8 @@ name = "kotha"
 version = "0.1.0"
 requires-python = ">=3.11,<3.12"
 dependencies = [
+    "anyio>=4.16.0",
+    "fastapi>=0.163.1",
     "faster-whisper>=1.2.1",
     "google-genai>=3.5.0,<4",
     "httpx2>=2.16.0",
@@ -14,6 +16,7 @@ dependencies = [
     "silero-vad>=6.2.3",
     "soundfile>=0.14.0",
     "torch>=2.15.0",
+    "uvicorn>=0.54.0",
 ]
 
 [build-system]
