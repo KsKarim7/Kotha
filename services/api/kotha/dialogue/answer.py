@@ -316,17 +316,19 @@ class AnswerPipeline:
         passages = {chunk_id: passage(chunk) for chunk_id, chunk in chunks.items()}
         started = time.monotonic()
         rejections: list[Rejection] = []
+        broken_rules: list[Rejection] = []
         for attempt in range(2):
             if attempt and time.monotonic() - started > REGENERATE_WITHIN_S:
-                return handoff(lang, HandoffReason.NO_TIME_TO_RETRY, rejections)
+                return handoff(lang, HandoffReason.NO_TIME_TO_RETRY, broken_rules)
             prompt = user_prompt(question, lang, list(chunks.values()), rejections)
             try:
                 answer = self._generate(prompt, stage_seconds)
             except LLMError as error:
-                return handoff(lang, llm_failure_reason(error))
+                return handoff(lang, llm_failure_reason(error), broken_rules)
             if NO_ANSWER in answer:
-                return handoff(lang, HandoffReason.NO_ANSWER)
+                return handoff(lang, HandoffReason.NO_ANSWER, broken_rules)
             rejections = rejections_for(answer, passages, lang)
             if not rejections:
                 return answer_reply(answer, lang, chunks)
-        return handoff(lang, HandoffReason.REJECTED_TWICE, rejections)
+            broken_rules += rejections
+        return handoff(lang, HandoffReason.REJECTED_TWICE, broken_rules)

@@ -125,6 +125,7 @@ def scripted_server(
     reply: bool = True,
     close_in_greeting: bool = False,
     timing: dict[str, object] = TIMING,
+    kind: str = "answer",
 ) -> Callable[[ServerConnection], Awaitable[None]]:
     async def handle(websocket: ServerConnection) -> None:
         assert json.loads(await websocket.recv())["type"] == "start"
@@ -141,7 +142,7 @@ def scripted_server(
             if frames == speech_end_after:
                 await websocket.send(json.dumps({"type": "vad", "event": "speech_end"}))
                 if reply:
-                    await websocket.send(json.dumps({"type": "bot_text", "kind": "answer"}))
+                    await websocket.send(json.dumps({"type": "bot_text", "kind": kind}))
                     await websocket.send(b"\x01\x00" * 160)
                 await websocket.send(json.dumps({"type": "reply_audio_end"}))
                 await websocket.send(json.dumps(timing))
@@ -176,14 +177,22 @@ def test_a_handoff_turn_records_its_reason_and_rules_in_the_csv(tmp_path: Path) 
         "handoff_reason": "rejected_twice",
         "rejections": ["unsupported_number", "too_long"],
     }
-    result = measured(scripted_server(speech_end_after=CLIP_FRAMES + 3, timing=rejected))
+    handoff = scripted_server(speech_end_after=CLIP_FRAMES + 3, timing=rejected, kind="handoff")
+    result = measured(handoff)
+    assert result.kind == "handoff" and not counted(result)
     assert (result.handoff_reason, result.rejections) == (
         "rejected_twice",
         "unsupported_number;too_long",
     )
     output = tmp_path / "turns.csv"
     write_results(output, [result])
-    [row] = csv.DictReader(output.open(encoding="utf-8"))
+    with output.open(encoding="utf-8") as written:
+        reader = csv.DictReader(written)
+        [row] = reader
+    assert reader.fieldnames is not None and reader.fieldnames[-2:] == [
+        "handoff_reason",
+        "rejections",
+    ]
     assert row["handoff_reason"] == "rejected_twice"
     assert row["rejections"] == "unsupported_number;too_long"
 

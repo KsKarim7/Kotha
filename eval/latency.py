@@ -46,11 +46,11 @@ RESULT_COLUMNS = (
     "question_id",
     "lang",
     "kind",
-    "handoff_reason",
-    "rejections",
     "split",
     "failure",
     *STAGES,
+    "handoff_reason",
+    "rejections",
 )
 START = json.dumps({"type": "start", "sample_rate": 16000, "consent": True})
 
@@ -245,16 +245,8 @@ def write_results(path: Path, results: Sequence[TurnResult]) -> None:
             stages = [
                 f"{result.stages[stage]:.4f}" if stage in result.stages else "" for stage in STAGES
             ]
-            row = [
-                result.question_id,
-                result.lang,
-                result.kind,
-                result.handoff_reason,
-                result.rejections,
-                result.split,
-                result.failure,
-            ]
-            writer.writerow([*row, *stages])
+            row = [result.question_id, result.lang, result.kind, result.split, result.failure]
+            writer.writerow([*row, *stages, result.handoff_reason, result.rejections])
 
 
 def print_summary(summary: Mapping[str, tuple[int, float, float]]) -> None:
