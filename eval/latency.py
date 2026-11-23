@@ -42,7 +42,16 @@ SERVER_EXIT_SECONDS = 60.0
 MIN_COUNTED_TURNS = 30
 SERVER_STAGES = ("asr", "retrieval", "llm", "tts_first_audio")
 STAGES = ("vad", *SERVER_STAGES, "ttfa", "ttfa_from_vad")
-RESULT_COLUMNS = ("question_id", "lang", "kind", "split", "failure", *STAGES)
+RESULT_COLUMNS = (
+    "question_id",
+    "lang",
+    "kind",
+    "handoff_reason",
+    "rejections",
+    "split",
+    "failure",
+    *STAGES,
+)
 START = json.dumps({"type": "start", "sample_rate": 16000, "consent": True})
 
 
@@ -51,6 +60,8 @@ class TurnResult:
     question_id: str
     lang: str
     kind: str = ""
+    handoff_reason: str = ""
+    rejections: str = ""
     split: bool = False
     failure: str = ""
     stages: dict[str, float] = field(default_factory=dict)
@@ -150,6 +161,8 @@ async def speak_and_listen(
                 result.kind = event["kind"]
             elif event["type"] == "timing":
                 timing = event
+                result.handoff_reason = event.get("handoff_reason") or ""
+                result.rejections = ";".join(event.get("rejections", []))
     finally:
         silence_task.cancel()
         await asyncio.gather(silence_task, return_exceptions=True)
@@ -232,7 +245,15 @@ def write_results(path: Path, results: Sequence[TurnResult]) -> None:
             stages = [
                 f"{result.stages[stage]:.4f}" if stage in result.stages else "" for stage in STAGES
             ]
-            row = [result.question_id, result.lang, result.kind, result.split, result.failure]
+            row = [
+                result.question_id,
+                result.lang,
+                result.kind,
+                result.handoff_reason,
+                result.rejections,
+                result.split,
+                result.failure,
+            ]
             writer.writerow([*row, *stages])
 
 
@@ -298,9 +319,10 @@ def main() -> None:
     split = sum(result.split for result in results)
     failed = Counter(result.failure for result in results if result.failure)
     kinds = Counter(result.kind for result in results if result.kind)
+    reasons = Counter(result.handoff_reason for result in results if result.handoff_reason)
     print(f"turns: {len(results)}, counted (answers, not split, not failed): ", end="")
     print(f"{sum(counted(result) for result in results)}, split: {split}")
-    print(f"replies: {dict(kinds)}, failures: {dict(failed)}")
+    print(f"replies: {dict(kinds)}, failures: {dict(failed)}, handoff reasons: {dict(reasons)}")
     counted_turns = sum(counted(result) for result in results)
     if counted_turns < MIN_COUNTED_TURNS:
         print(f"WARNING: only {counted_turns} counted turns; the blueprint asks for at least 30")
@@ -320,6 +342,7 @@ def main() -> None:
         metrics["split_turns"] = split
         metrics.update({f"replies.{kind}": count for kind, count in kinds.items()})
         metrics.update({f"failures.{failure}": count for failure, count in failed.items()})
+        metrics.update({f"handoffs.{reason}": count for reason, count in reasons.items()})
         metrics["startup_seconds"] = readiness.startup_seconds
         if cold_start_seconds is not None:
             metrics["cold_start_seconds"] = cold_start_seconds

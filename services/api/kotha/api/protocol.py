@@ -3,7 +3,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, Field, TypeAdapter
 
 from kotha.audio.convert import SAMPLE_RATE_HZ
-from kotha.dialogue.answer import HandoffReason, ReplyKind
+from kotha.dialogue.answer import HandoffReason, Rejection, ReplyKind
 from kotha.dialogue.routing import Language
 
 ErrorCode = Literal[
@@ -75,12 +75,18 @@ class ReplyAudioEnd(BaseModel):
     type: Literal["reply_audio_end"] = "reply_audio_end"
 
 
-class Timing(BaseModel):
-    type: Literal["timing"] = "timing"
+class StageSeconds(BaseModel):
     asr_seconds: float | None = None
     retrieval_seconds: float | None = None
     llm_seconds: float | None = None
     tts_first_audio_seconds: float | None = None
+
+
+class Timing(StageSeconds):
+    type: Literal["timing"] = "timing"
+    kind: ReplyKind
+    handoff_reason: HandoffReason | None = None
+    rejections: list[Rejection] = []
 
 
 class ErrorEvent(BaseModel):

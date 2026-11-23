@@ -1,8 +1,10 @@
 import asyncio
+import csv
 import json
 import socket
 from collections.abc import Awaitable, Callable
 from itertools import islice
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -25,6 +27,7 @@ from latency import (
     summarise,
     turn_stages,
     without_trailing_silence,
+    write_results,
 )
 
 
@@ -118,7 +121,10 @@ QUESTION = Question("q1", "en", "sim-replacement", "How do I replace my SIM?")
 
 
 def scripted_server(
-    speech_end_after: int | None, reply: bool = True, close_in_greeting: bool = False
+    speech_end_after: int | None,
+    reply: bool = True,
+    close_in_greeting: bool = False,
+    timing: dict[str, object] = TIMING,
 ) -> Callable[[ServerConnection], Awaitable[None]]:
     async def handle(websocket: ServerConnection) -> None:
         assert json.loads(await websocket.recv())["type"] == "start"
@@ -138,7 +144,7 @@ def scripted_server(
                     await websocket.send(json.dumps({"type": "bot_text", "kind": "answer"}))
                     await websocket.send(b"\x01\x00" * 160)
                 await websocket.send(json.dumps({"type": "reply_audio_end"}))
-                await websocket.send(json.dumps(TIMING))
+                await websocket.send(json.dumps(timing))
 
     return handle
 
@@ -161,6 +167,30 @@ def test_a_turn_skips_the_greeting_audio_and_measures_every_stage() -> None:
     assert result.stages["ttfa"] == pytest.approx(
         result.stages["vad"] + result.stages["ttfa_from_vad"]
     )
+
+
+def test_a_handoff_turn_records_its_reason_and_rules_in_the_csv(tmp_path: Path) -> None:
+    rejected = {
+        **TIMING,
+        "kind": "handoff",
+        "handoff_reason": "rejected_twice",
+        "rejections": ["unsupported_number", "too_long"],
+    }
+    result = measured(scripted_server(speech_end_after=CLIP_FRAMES + 3, timing=rejected))
+    assert (result.handoff_reason, result.rejections) == (
+        "rejected_twice",
+        "unsupported_number;too_long",
+    )
+    output = tmp_path / "turns.csv"
+    write_results(output, [result])
+    [row] = csv.DictReader(output.open(encoding="utf-8"))
+    assert row["handoff_reason"] == "rejected_twice"
+    assert row["rejections"] == "unsupported_number;too_long"
+
+
+def test_an_answered_turn_has_no_handoff_reason() -> None:
+    result = measured(scripted_server(speech_end_after=CLIP_FRAMES + 3))
+    assert (result.handoff_reason, result.rejections) == ("", "")
 
 
 def test_a_turn_that_ends_before_the_clip_is_split() -> None:

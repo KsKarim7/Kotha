@@ -195,6 +195,7 @@ class BotReply:
     text: str
     sources: tuple[Source, ...] = ()
     handoff_reason: HandoffReason | None = None
+    rejections: tuple[Rejection, ...] = ()
     stage_seconds: Mapping[str, float] = field(default_factory=dict, compare=False)
 
 
@@ -202,8 +203,11 @@ def fixed_reply(kind: ReplyKind, lang: Language) -> BotReply:
     return BotReply(kind, lang, FIXED_REPLIES[kind][lang])
 
 
-def handoff(lang: Language, reason: HandoffReason) -> BotReply:
-    return BotReply(ReplyKind.HANDOFF, lang, FIXED_REPLIES[ReplyKind.HANDOFF][lang], (), reason)
+def handoff(
+    lang: Language, reason: HandoffReason, rejections: Sequence[Rejection] = ()
+) -> BotReply:
+    text = FIXED_REPLIES[ReplyKind.HANDOFF][lang]
+    return BotReply(ReplyKind.HANDOFF, lang, text, (), reason, tuple(rejections))
 
 
 def llm_failure_reason(error: LLMError) -> HandoffReason:
@@ -314,7 +318,7 @@ class AnswerPipeline:
         rejections: list[Rejection] = []
         for attempt in range(2):
             if attempt and time.monotonic() - started > REGENERATE_WITHIN_S:
-                return handoff(lang, HandoffReason.NO_TIME_TO_RETRY)
+                return handoff(lang, HandoffReason.NO_TIME_TO_RETRY, rejections)
             prompt = user_prompt(question, lang, list(chunks.values()), rejections)
             try:
                 answer = self._generate(prompt, stage_seconds)
@@ -325,4 +329,4 @@ class AnswerPipeline:
             rejections = rejections_for(answer, passages, lang)
             if not rejections:
                 return answer_reply(answer, lang, chunks)
-        return handoff(lang, HandoffReason.REJECTED_TWICE)
+        return handoff(lang, HandoffReason.REJECTED_TWICE, rejections)
