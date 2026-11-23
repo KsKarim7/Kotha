@@ -336,7 +336,8 @@ cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
   microphone on `localhost` or HTTPS), tick the consent box, press Start, wait for the greeting,
   then speak. Use headphones if echo cancellation lets the bot's voice back in.
 - `KOTHA_ASR_MODEL` is required: a faster-whisper model name or a local CTranslate2 folder.
-  `KOTHA_ASR_DEVICE` defaults to `cpu`; use `cuda` only after the GPU check above.
+  `KOTHA_ASR_DEVICE` defaults to `cpu`; use `cuda` only after the GPU check above, with
+  `KOTHA_ASR_COMPUTE_TYPE=int8_float16` (the default `int8` is the CPU setting).
 - `--ws-max-size 65536` keeps uvicorn from buffering frames far larger than the one-second limit
   the app enforces (32,000 bytes).
 - Startup loads every model and warms it: Silero once, the voices through the fixed prompts,
@@ -437,6 +438,12 @@ cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
     as the server sending. `ttfa_from_vad` is the same from the `speech_end` event.
   - The true end of speech is the end of the last 20 ms frame of the clip on the paced timeline,
     after the clip was cut at its last sample above 1% of its peak.
+  - `ttfa_all_turns`: `ttfa` over every turn that was heard, whatever the reply (answers,
+    handoffs, "please repeat"), leaving out only split and failed turns: what a caller waits
+    before hearing anything. The other rows count answers only.
+- On the GPU, after the check above: add `KOTHA_ASR_DEVICE=cuda KOTHA_ASR_COMPUTE_TYPE=int8_float16`
+  (ADR 0005's compute type) before `uv run`. `KOTHA_ASR_COMPUTE_TYPE` defaults to `int8`, the CPU
+  setting; both are logged as run parameters.
 - `--launch` refuses a port that is already in use, stops waiting if the app exits during
   startup, and kills the app if it does not exit within 60 s at the end.
 - A number counts for `EVALUATION.md` only from a run with `git_dirty` false. Timings on cuda count
