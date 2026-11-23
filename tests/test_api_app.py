@@ -6,7 +6,7 @@ import pytest
 from starlette.testclient import TestClient
 from test_api_session import FakeAsr, FakePipeline, FakeTts, loud_probability
 
-from kotha.api.app import create_app, warm_up
+from kotha.api.app import asr_options, create_app, warm_up
 from kotha.api.session import CallServices
 from kotha.asr.whisper import Transcript
 from kotha.tts.service import TtsService
@@ -91,3 +91,14 @@ def test_a_failed_warm_up_stops_startup_and_releases_resources() -> None:
         with TestClient(create_app(failing_load)):
             pass
     assert released == ["database"]
+
+
+def test_the_asr_runs_int8_on_the_cpu_unless_told_otherwise(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("KOTHA_ASR_DEVICE", raising=False)
+    monkeypatch.delenv("KOTHA_ASR_COMPUTE_TYPE", raising=False)
+    assert asr_options() == {"device": "cpu", "compute_type": "int8"}
+    monkeypatch.setenv("KOTHA_ASR_DEVICE", "cuda")
+    monkeypatch.setenv("KOTHA_ASR_COMPUTE_TYPE", "int8_float16")
+    assert asr_options() == {"device": "cuda", "compute_type": "int8_float16"}
