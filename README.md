@@ -80,7 +80,7 @@ Every number comes from a committed evaluation run and is reported, with its run
 
 | Measure | Result | Run |
 | --- | --- | --- |
-| Retrieval, typed questions, hybrid (RRF): hit@3 / MRR | 0.931 / 0.832 (72 questions) | `eval/retrieval.py`, MLflow `248a1bca` |
+| Retrieval, typed questions, hybrid (RRF): hit@3 / MRR | 0.903 / 0.840 (72 questions) | `eval/retrieval.py`, MLflow `39b2a864` |
 | Retrieval, typed questions, dense only: hit@3 / MRR | 0.958 / 0.893 | same run |
 | TTFA from the end of speech, warm calls on the CPU: p50 / p95 | 12.742 s / 24.036 s (56 answered turns, synthetic speech) | `eval/latency.py`, MLflow `fd75c9a5` |
 

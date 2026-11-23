@@ -170,7 +170,8 @@ transaction.
 `kotha.rag.retriever.HybridRetriever.search` takes the top 20 chunks by pgvector cosine distance
 and the top 20 by our own BM25 (`kotha.rag.bm25`, with the loanword lexicon expanding Latin and
 Bangla spellings of English terms), fuses the two rankings by reciprocal rank fusion (k = 60) and
-returns 4 chunks. `kotha.rag.citations.verify_answer` checks that every sentence of an answer ends
+returns 4 chunks. BM25 also scores every table body row on its own and ranks a chunk by its best
+unit, so a package code listed once in a long table is found (ADR 0006 update). `kotha.rag.citations.verify_answer` checks that every sentence of an answer ends
 with a citation of a retrieved chunk and that every number in it appears in a cited chunk.
 
 ## Answer pipeline
