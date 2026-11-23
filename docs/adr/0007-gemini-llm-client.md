@@ -92,7 +92,7 @@ hands off.
 - **Slow answers are cut off.** An attempt that is not the last gets 4 s. When the first two
   attempts time out, the last gets 4 s too, where the old single retry got about 8 s, so an answer
   that would have taken 5-8 s now ends in a handoff. Fast failures (a quick 503) leave the last
-  attempt most of the deadline.
+  attempt most of the deadline, and a resting call's last attempt gets about 8 s.
 - **A resting primary.** While it rests, a call has two attempts, not three, and a primary that
   recovers is found within a minute. A primary attempt that times out because the worker pool is
   full of abandoned attempts also rests it, although the model did not fail.

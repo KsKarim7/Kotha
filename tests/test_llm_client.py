@@ -155,13 +155,13 @@ def test_two_overloaded_replies_still_end_in_an_answer() -> None:
 def test_an_overloaded_primary_rests_and_is_tried_again_after_its_rest(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(gemini, "PRIMARY_REST_S", 0.1)
+    monkeypatch.setattr(gemini, "PRIMARY_REST_S", 0.5)
     server = Server([status(503), answer("One."), answer("Two.")])
     client = client_for(server)
     assert client.generate("system", "first") == "One."
     assert client.generate("system", "second") == "Two."
     assert server.models() == ["gemini-3.1-flash-lite"] + ["gemini-3.5-flash-lite"] * 2
-    time.sleep(0.3)
+    time.sleep(0.7)
     assert client.generate("system", "third") == "Fine."
     assert server.models()[-1] == "gemini-3.1-flash-lite"
 
