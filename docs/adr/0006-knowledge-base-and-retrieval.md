@@ -118,12 +118,18 @@ the KB's wording; Khaled reviews them and adds his own.
   three times, while the packages table names it once in a long chunk, which BM25's length
   normalisation penalises. Dense search ranks the same chunks first. Markup stripping and the
   lexicon play no part; the lexicon only maps `জিবি` to `gb`.
-- **Decision.** BM25 also scores every table row on its own, with its chunk's title and heading,
-  and a chunk counts with its best unit, the whole chunk or one of its rows. A row that lists a code
-  is short, so it outranks long chunks that only mention the code. Every package code in the
-  catalogue is a regression test: the document that lists it must be in BM25's top 4 and in
-  hybrid search's top 4. The test does not use `rag_test` questions. The rows join the index
-  statistics, so every BM25 ranking changes a little; `EVALUATION.md` shows the old and new rows.
+- **Decision.** BM25 also scores every table body row (the rows after the `| --- |` separator) on
+  its own, and a chunk counts with its best unit, the whole chunk or one of its rows. A row is
+  short, so a row that names a code outranks long chunks that only mention it. That also helps a
+  row that names the code as an example: for `NT-30GB` a quick-reference row in the balance
+  document ranks first and the packages table second. Header and separator rows are not scored
+  alone, and rows carry no title or heading, so a query that matches only a title gains nothing.
+  Every package code in the catalogue is a regression test: the document that lists it must be in
+  BM25's top 2 (old code: `NT-30GB` at rank 4) and in hybrid search's top 4. The test does not use
+  `rag_test` questions.
+- **Cost.** The rows join the index statistics, so every BM25 ranking changes. A scratch run of
+  the retrieval evaluation before merging showed BM25 and hybrid MRR higher but hybrid hit@3
+  lower on the typed questions. The committed run on main gives the numbers in `EVALUATION.md`.
 - **Not done: Bangla stemming.** Exact tokens miss inflected forms (`প্যাকেজের` against
   `প্যাকেজ`). A light suffix stripper is an experiment for later, and it needs a dev/test split of
   `rag_test` first, so that the suffix list is chosen on the dev half and scored once on the
