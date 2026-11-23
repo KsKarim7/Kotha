@@ -43,23 +43,31 @@ Interpretation: [to be written]
 
 ## Retrieval
 
+Current retriever (BM25 also scores table body rows, ADR 0006 update):
+
 | Retriever | Typed questions: hit@3 / MRR | ASR-transcribed questions: hit@3 / MRR |
 | --- | --- | --- |
 | Dense only | 0.958 / 0.893 | [measure] |
-| BM25 only | 0.694 / 0.663 | [measure] |
-| Hybrid (RRF) | 0.931 / 0.832 | [measure] |
-| Hybrid + lexicon expansion | 0.903 / 0.830 | [measure] |
+| BM25 only | 0.750 / 0.672 | [measure] |
+| Hybrid (RRF) | 0.903 / 0.840 | [measure] |
+| Hybrid + lexicon expansion | 0.889 / 0.831 | [measure] |
 
-Typed questions by language, hit@3 / MRR (24 questions each):
+Typed questions, old and new, hit@3 / MRR. "Old" is MS1's retriever, which scored whole chunks only; "new" also scores each table body row alone:
 
-| Retriever | bn | en | mix |
-| --- | --- | --- | --- |
-| Dense only | 0.958 / 0.913 | 0.917 / 0.865 | 1.000 / 0.903 |
-| BM25 only | 0.625 / 0.571 | 0.625 / 0.644 | 0.833 / 0.774 |
-| Hybrid (RRF) | 0.875 / 0.759 | 0.917 / 0.814 | 1.000 / 0.924 |
-| Hybrid + lexicon expansion | 0.875 / 0.759 | 0.917 / 0.814 | 0.917 / 0.917 |
+| Retriever | Old: all | New: all | Old: bn | New: bn | Old: en | New: en | Old: mix | New: mix |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Dense only | 0.958 / 0.893 | 0.958 / 0.893 | 0.958 / 0.913 | 0.958 / 0.913 | 0.917 / 0.865 | 0.917 / 0.865 | 1.000 / 0.903 | 1.000 / 0.903 |
+| BM25 only | 0.694 / 0.663 | 0.750 / 0.672 | 0.625 / 0.571 | 0.708 / 0.593 | 0.625 / 0.644 | 0.667 / 0.645 | 0.833 / 0.774 | 0.875 / 0.777 |
+| Hybrid (RRF) | 0.931 / 0.832 | 0.903 / 0.840 | 0.875 / 0.759 | 0.875 / 0.787 | 0.917 / 0.814 | 0.875 / 0.810 | 1.000 / 0.924 | 0.958 / 0.923 |
+| Hybrid + lexicon expansion | 0.903 / 0.830 | 0.889 / 0.831 | 0.875 / 0.759 | 0.875 / 0.813 | 0.917 / 0.814 | 0.875 / 0.810 | 0.917 / 0.917 | 0.917 / 0.869 |
 
-Values are the run's metrics rounded to 3 decimals. Run: `eval/retrieval.py` (runbook, "Retrieval evaluation") on commit `75815fd`, `git_dirty` false, MLflow run `248a1bcae2ad4aef834b73797ffad89a` in the experiment `kotha-retrieval`; 72 typed questions (`rag_test.csv`, SHA-256 `82958d25…`), 126 chunks, bge-m3 at revision `5617a9f6` on CPU (the script's default device), 20 candidates per retriever, RRF k = 60, lexicon `loanwords.csv` with 22 spellings. The ASR-transcribed column needs the recorded test set and the M3 ASR run.
+Why the rows changed: a bare package code (`NT-30GB`) did not reach the document that lists it, which is BM25's job. Each table body row is now also scored on its own, and a chunk counts with its best unit (ADR 0006 update). The rows join BM25's index statistics, so every BM25 ranking moves. Hybrid hit@3 fell by two questions (one en, one mix) and hybrid MRR rose. The change was chosen on the package-code regression test, not on these questions, and was not adjusted after this run. Dense search is unchanged.
+
+Values are the runs' metrics rounded to 3 decimals. Both runs: `eval/retrieval.py` (runbook, "Retrieval evaluation"), `git_dirty` false, experiment `kotha-retrieval`, 72 typed questions (`rag_test.csv`, SHA-256 `82958d25…`), 126 chunks, bge-m3 at revision `5617a9f6` on CPU (the script's default device), 20 candidates per retriever, RRF k = 60, lexicon `loanwords.csv` with 22 spellings.
+- Old: commit `75815fd`, MLflow run `248a1bcae2ad4aef834b73797ffad89a`.
+- New: commit `e1454e1`, MLflow run `39b2a864ab744d049f478d5e7de0c7ae`.
+
+The ASR-transcribed column needs the recorded test set and the M3 ASR run.
 
 The typed questions were written by the knowledge base's author and will be reviewed by Khaled, which tends to raise the scores. Each question has one gold document, although the knowledge base repeats some facts across documents, so a chunk from another document that also answers the question counts as a miss.
 
