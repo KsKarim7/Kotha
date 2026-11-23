@@ -214,7 +214,10 @@ def test_stars_and_hashes_are_spoken_only_inside_a_code_with_digits(
         ("From 9:05.", "en", "from nine oh five in the morning"),
         ("Or 18:30.", "en", "or six thirty in the evening"),
         ("সকাল ১০:০০ থেকে ১০:৩০", "bn", "সকাল দশটা থেকে সকাল দশটা ত্রিশ মিনিট"),
-        ("রাতে ২৩:০০ টায়", "bn", "রাতে এগারোটা টায়"),
+        ("রাতে ২৩:০০ টায় বন্ধ", "bn", "রাতে এগারোটায় বন্ধ"),
+        ("১৮:০০টায় বন্ধ", "bn", "সন্ধ্যা ছয়টায় বন্ধ"),
+        ("১৮:৩০টার পরে", "bn", "সন্ধ্যা ছয়টা ত্রিশ মিনিটের পরে"),
+        ("১০:০০টা থেকে", "bn", "সকাল দশটা থেকে"),
         ("Score 25:70.", "en", "score twenty five seventy"),
     ],
 )

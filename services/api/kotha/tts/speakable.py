@@ -88,7 +88,10 @@ PERCENT = re.compile("%")
 DATA_UNIT_AFTER_NUMBER = re.compile(r"\s*(gb|mb|kb)(?![a-z])", re.IGNORECASE)
 GROUPED_NUMBER = r"(?:\d{1,3}(?:,\d{3})+|\d{1,2}(?:,\d{2})+,\d{3})(?!,?\d)"
 NUMBER = re.compile(rf"(?<![\d.])({GROUPED_NUMBER}|\d+)(?:\.(\d+))?(?!\d)")
-CLOCK_TIME = re.compile(r"(?<![\d:])(\d{1,2}):(\d{2})(?![\d:])")
+# a Bangla hour word already ends in টা, so a written টা, টায় or টার after the time is absorbed
+CLOCK_TIME = re.compile(r"(?<![\d:])(\d{1,2}):(\d{2})(?![\d:])(?:\s*টা(য়|র)?(?![ঀ-৿]))?")
+# the case ending after the hour word, and after মিনিট when there are minutes
+BANGLA_TIME_CASE_ENDINGS = {"য়": ("য়", "ে"), "র": ("র", "ের")}
 # each period runs until the hour given with it
 BANGLA_DAY_PERIODS = (
     (4, "রাত"),
@@ -209,11 +212,16 @@ def spoken_time(match: re.Match[str], lang: Language) -> str:
         return match.group(0)
     clock_hour = hour % 12 or 12
     if lang == "bn":
-        minutes = f" {num_to_bn_words(minute)} মিনিট" if minute else ""
+        hour_ending, minute_ending = BANGLA_TIME_CASE_ENDINGS.get(match.group(3) or "", ("", ""))
+        hour_word = f"{num_to_bn_words(clock_hour)}টা"
+        if minute:
+            spoken = f"{hour_word} {num_to_bn_words(minute)} মিনিট{minute_ending}"
+        else:
+            spoken = f"{hour_word}{hour_ending}"
         words_before = match.string[: match.start()].split()
         named = bool(words_before) and words_before[-1] in BANGLA_PERIOD_WORDS
         period = "" if named else f"{day_period(hour, BANGLA_DAY_PERIODS)} "
-        return f" {period}{num_to_bn_words(clock_hour)}টা{minutes} "
+        return f" {period}{spoken} "
     if minute == 0 and hour in (0, 12):
         return " midnight " if hour == 0 else " noon "
     minutes = ""
