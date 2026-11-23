@@ -23,7 +23,7 @@ from kotha.rag.retriever import (
     reciprocal_rank_fusion,
     search_tokens,
     stored_chunk,
-    table_rows,
+    table_body_rows,
 )
 from kotha.text.lexicon import LEXICON_PATH, read_lexicon
 
@@ -183,7 +183,8 @@ def test_sparse_search_on_the_real_knowledge_base() -> None:
 
 def test_a_code_listed_once_in_a_table_row_outranks_chunks_that_repeat_it() -> None:
     rows = "\n".join(f"| XY-{size}GB | {size} GB | 30 days | A pack |" for size in range(1, 30))
-    table = make_chunk("packs.en.0", "Packs", f"| Code | Data | Validity | Use |\n{rows}")
+    header = "| Code | Data | Validity | Use |\n| --- | --- | --- | --- |"
+    table = make_chunk("packs.en.0", "Packs", f"{header}\n{rows}")
     filler = " ".join(f"word{index}" for index in range(150))
     mention = make_chunk(
         "howto.en.0", "How to", f"Send XY-7GB to buy it. XY-7GB renews. Stop XY-7GB. {filler}"
@@ -205,7 +206,7 @@ def test_equal_scores_are_ordered_by_chunk_id() -> None:
 def catalogue_codes(chunks: Sequence[Chunk]) -> dict[str, str]:
     listed = {}
     for chunk in chunks:
-        for row in table_rows(chunk.text):
+        for row in table_body_rows(chunk.text):
             first_cell = row.strip("| ").split("|")[0].strip(" `")
             if chunk.doc_id.startswith("packages-") and CODE.fullmatch(first_cell):
                 listed[first_cell] = chunk.doc_id
@@ -222,8 +223,15 @@ def test_bm25_finds_the_document_that_lists_each_package_code() -> None:
     doc_ids = {chunk.id: chunk.doc_id for chunk in chunks}
     sparse = SparseRetriever(chunks, read_lexicon(LEXICON_PATH))
     for code, listing_doc in catalogue_codes(chunks).items():
-        top_docs = [doc_ids[chunk_id] for chunk_id in sparse.ranked_ids(code, limit=4)]
+        top_docs = [doc_ids[chunk_id] for chunk_id in sparse.ranked_ids(code, limit=2)]
         assert listing_doc in top_docs, code
+
+
+def test_only_table_body_rows_are_scored_alone() -> None:
+    table = "| Code | Data |\n| :--- | ---: |\n| XY-1GB | 1 GB |\n| XY-2GB | 2 GB |"
+    text = f"Intro.\n\n{table}\n\nEnd."
+    assert table_body_rows(text) == ["| XY-1GB | 1 GB |", "| XY-2GB | 2 GB |"]
+    assert table_body_rows("| Not | a table body |") == []
 
 
 @needs_database

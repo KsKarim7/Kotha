@@ -1,3 +1,4 @@
+import re
 import threading
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
@@ -22,6 +23,7 @@ NEAREST_CHUNKS = """
     SELECT id FROM kb_chunks WHERE id = ANY(%s) ORDER BY embedding <=> %s, id LIMIT %s
 """
 MARKDOWN_MARKUP = str.maketrans("`|<>", "    ")
+TABLE_SEPARATOR = re.compile(r"\|(?:\s*:?-+:?\s*\|)+")
 
 
 @dataclass(frozen=True)
@@ -48,19 +50,27 @@ def search_tokens(text: str) -> list[str]:
     return normalize(text.translate(MARKDOWN_MARKUP)).split()
 
 
-def table_rows(text: str) -> list[str]:
-    return [line for line in text.splitlines() if line.lstrip().startswith("|")]
+def table_body_rows(text: str) -> list[str]:
+    rows: list[str] = []
+    in_body = False
+    for line in text.splitlines():
+        if not line.lstrip().startswith("|"):
+            in_body = False
+        elif TABLE_SEPARATOR.fullmatch(line.strip()):
+            in_body = True
+        elif in_body:
+            rows.append(line)
+    return rows
 
 
 def scoring_units(chunk: Chunk) -> list[list[str]]:
-    rows = (f"{chunk.title}\n{chunk.heading}\n{row}" for row in table_rows(chunk.text))
-    row_tokens = [tokens for tokens in map(search_tokens, rows) if tokens]
-    return [search_tokens(embedding_text(chunk)), *row_tokens]
+    row_tokens = [search_tokens(row) for row in table_body_rows(chunk.text)]
+    return [search_tokens(embedding_text(chunk)), *filter(None, row_tokens)]
 
 
 class SparseRetriever:
-    # a table row is also scored alone, so a code listed once in a long table outranks chunks
-    # that only mention it
+    # a table body row is also scored alone, so a code listed once in a long table outranks
+    # chunks that only mention it
     def __init__(self, chunks: Sequence[Chunk], lexicon: Mapping[str, str]) -> None:
         units = [(chunk.id, tokens) for chunk in chunks for tokens in scoring_units(chunk)]
         self._unit_chunk_ids = [chunk_id for chunk_id, _ in units]
