@@ -89,6 +89,26 @@ DATA_UNIT_AFTER_NUMBER = re.compile(r"\s*(gb|mb|kb)(?![a-z])", re.IGNORECASE)
 GROUPED_NUMBER = r"(?:\d{1,3}(?:,\d{3})+|\d{1,2}(?:,\d{2})+,\d{3})(?!,?\d)"
 NUMBER = re.compile(rf"(?<![\d.])({GROUPED_NUMBER}|\d+)(?:\.(\d+))?(?!\d)")
 CLOCK_TIME = re.compile(r"(?<![\d:])(\d{1,2}):(\d{2})(?![\d:])")
+# each period runs until the hour given with it
+BANGLA_DAY_PERIODS = (
+    (4, "রাত"),
+    (6, "ভোর"),
+    (12, "সকাল"),
+    (15, "দুপুর"),
+    (18, "বিকেল"),
+    (20, "সন্ধ্যা"),
+    (24, "রাত"),
+)
+BANGLA_PERIOD_WORDS = frozenset(
+    {"রাত", "ভোর", "সকাল", "দুপুর", "বিকেল", "সন্ধ্যা", "রাতে", "ভোরে", "সকালে", "দুপুরে"}
+    | {"বিকেলে", "সন্ধ্যায়"}
+)
+ENGLISH_DAY_PERIODS = (
+    (12, "in the morning"),
+    (17, "in the afternoon"),
+    (21, "in the evening"),
+    (24, "at night"),
+)
 DIGITS = re.compile(r"\d+")
 EMPHASIS = re.compile(r"\*{2,}|_{2,}")
 CODE = re.compile(r"(?<![*#\d])(?=[*#\d]*\d)[*#\d]*[*#][*#\d]*")
@@ -179,17 +199,27 @@ def spoken_number(match: re.Match[str], text: str, lang: Language) -> tuple[str,
     return f" {words} ", after
 
 
+def day_period(hour: int, periods: tuple[tuple[int, str], ...]) -> str:
+    return next(name for end_hour, name in periods if hour < end_hour)
+
+
 def spoken_time(match: re.Match[str], lang: Language) -> str:
     hour, minute = int(match.group(1)), int(match.group(2))
     if hour > 23 or minute > 59:
         return match.group(0)
+    clock_hour = hour % 12 or 12
     if lang == "bn":
         minutes = f" {num_to_bn_words(minute)} মিনিট" if minute else ""
-        return f" {num_to_bn_words(hour)}টা{minutes} "
-    if minute == 0:
-        return f" {num_to_en_words(hour)} o'clock "
-    minutes = f"oh {num_to_en_words(minute)}" if minute < 10 else num_to_en_words(minute)
-    return f" {num_to_en_words(hour)} {minutes} "
+        words_before = match.string[: match.start()].split()
+        named = bool(words_before) and words_before[-1] in BANGLA_PERIOD_WORDS
+        period = "" if named else f"{day_period(hour, BANGLA_DAY_PERIODS)} "
+        return f" {period}{num_to_bn_words(clock_hour)}টা{minutes} "
+    if minute == 0 and hour in (0, 12):
+        return " midnight " if hour == 0 else " noon "
+    minutes = ""
+    if minute:
+        minutes = f" oh {num_to_en_words(minute)}" if minute < 10 else f" {num_to_en_words(minute)}"
+    return f" {num_to_en_words(clock_hour)}{minutes} {day_period(hour, ENGLISH_DAY_PERIODS)} "
 
 
 def spoken_numbers(text: str, lang: Language) -> str:
