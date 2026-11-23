@@ -24,7 +24,6 @@ PRIMARY_MODEL = "gemini-3.1-flash-lite"
 RETRY_MODEL = "gemini-3.5-flash-lite"
 # the retry model also returns 503 or stalls, so the deadline holds three capped attempts
 ATTEMPT_MODELS = (PRIMARY_MODEL, RETRY_MODEL, RETRY_MODEL)
-PRIMARY_REST_S = 60.0
 TOTAL_DEADLINE_S = 12.0
 ATTEMPT_S = 4.0
 MIN_RETRY_S = 2.0
@@ -76,19 +75,16 @@ class GeminiClient:
             http_options=types.HttpOptions(httpx_client=self._http, timeout=BACKSTOP_TIMEOUT_MS),
         )
         self._workers = ThreadPoolExecutor(WORKER_THREADS, thread_name_prefix="gemini")
-        self._primary_rests_until = 0.0
 
     def generate(self, system_prompt: str, user_prompt: str) -> str:
         deadline = time.monotonic() + TOTAL_DEADLINE_S
-        primary_resting = time.monotonic() < self._primary_rests_until
-        *early_models, last_model = ATTEMPT_MODELS[1:] if primary_resting else ATTEMPT_MODELS
+        # the retry model declines answerable questions more often: start each call on the primary
+        *early_models, last_model = ATTEMPT_MODELS
         for model in early_models:
             budget_s = min(ATTEMPT_S, deadline - time.monotonic())
             try:
                 return self._attempt(model, system_prompt, user_prompt, budget_s)
             except LLMTransientError:
-                if model == PRIMARY_MODEL:
-                    self._primary_rests_until = time.monotonic() + PRIMARY_REST_S
                 if deadline - time.monotonic() < MIN_RETRY_S:
                     raise
         return self._attempt(last_model, system_prompt, user_prompt, deadline - time.monotonic())
