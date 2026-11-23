@@ -386,6 +386,31 @@ cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
   - `llm_error`: the request was refused (4xx, for example a revoked key) or the answer was cut
     off. Check `GEMINI_API_KEY` in `.env` and that the app started without errors.
 
+## Browser smoke test (manual, not in CI)
+
+`eval/browser_smoke.py` makes one call through the real page in headless Chromium. It synthesises
+the question with the MMS voice (12 s of silence first, so it is spoken after the greeting) and
+starts Chromium with `--use-fake-ui-for-media-stream` (grant the microphone),
+`--use-fake-device-for-media-stream` and `--use-file-for-fake-audio-capture=<wav>%noloop` (the WAV
+is the microphone). It ticks consent, presses Start, watches the page's WebSocket and presses End.
+It checks that the greeting's audio arrives, the question is transcribed, a cited answer is shown
+and its audio arrives, and End closes the socket and resets the page. It prints only those results,
+the reply kinds, handoff reasons and cited document ids, and exits 1 if a check fails.
+
+One-time setup: `uv run --with playwright playwright install chromium` (into
+`~/.cache/ms-playwright`, no sudo). Headless Chromium needs the system packages `libnss3` and
+`libnspr4` (`sudo apt-get install -y libnss3 libnspr4`). Playwright does not bring torch, so
+`uv run --with playwright` is safe here. With the app running (for example the Docker stack below):
+
+```bash
+cd ~/kotha && HF_HUB_OFFLINE=1 uv run --with playwright python eval/browser_smoke.py \
+  --work-dir ~/kotha-runs/browser
+```
+
+Result on 2026-11-24 (Docker stack from `6f9d156`, Chromium headless shell 159.0.8154.6,
+Playwright 1.65.2): greeting audio, transcription and End passed; the turn handed off with
+`llm_rate_limited`, because the key's daily Gemini quota had run out, so no cited answer was shown.
+
 ## Docker stack
 
 `docker compose up` starts the database and the app. The app image (`Dockerfile`) is CPU-only: it
