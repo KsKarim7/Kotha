@@ -153,6 +153,9 @@ function closeMessage(pending, code) {
   if (code === 1008) {
     return `Call refused by the server (${pending.lastError || "policy"}).`;
   }
+  if (code === 1001) {
+    return "Call closed: the server heard nothing from this page for 30 seconds.";
+  }
   return "Connection lost.";
 }
 

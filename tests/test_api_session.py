@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import threading
@@ -15,6 +16,7 @@ from kotha.api.session import (
     MAX_BAD_MESSAGES,
     MAX_FRAME_BYTES,
     CallServices,
+    CallSession,
     frame_error,
     unusable_reason,
 )
@@ -555,3 +557,54 @@ def test_logs_name_events_but_never_carry_the_caller_text(
     messages = " ".join(caplog.messages)
     assert "event=call_started" in messages and "kind=answer" in messages
     assert "SIM" not in messages and "service centre" not in messages
+
+
+def test_a_client_that_goes_silent_is_closed_as_going_away(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr("kotha.api.session.CLIENT_SILENCE_TIMEOUT_S", 0.3)
+    caplog.set_level(logging.INFO, logger="kotha")
+    with call() as websocket:
+        started(websocket)
+        events = events_until(websocket, "closed")
+    assert events[-1] == {"type": "closed", "code": 1001}
+    assert any("event=call_timeout" in message for message in caplog.messages)
+    assert any("reason=client_silent" in message for message in caplog.messages)
+
+
+class UnreadSocket:
+    def __init__(self) -> None:
+        self.never_drained = asyncio.Event()
+
+    async def accept(self) -> None:
+        pass
+
+    async def receive(self) -> dict[str, Any]:
+        await asyncio.sleep(0.05)
+        return {"type": "websocket.receive", "text": json.dumps(START)}
+
+    async def send_text(self, text: str) -> None:
+        await self.never_drained.wait()
+
+    async def send_bytes(self, frame: bytes) -> None:
+        await self.never_drained.wait()
+
+    async def close(self, code: int) -> None:
+        await self.never_drained.wait()
+
+
+def test_a_client_that_stops_reading_ends_the_call_instead_of_blocking(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr("kotha.api.session.SEND_TIMEOUT_S", 0.3)
+    caplog.set_level(logging.INFO, logger="kotha")
+    services = CallServices(lambda: loud_probability, FakeAsr(), FakePipeline(), FakeTts())
+    session = CallSession(UnreadSocket(), services)
+
+    async def run_briefly() -> None:
+        async with asyncio.timeout(5):
+            await session.run()
+
+    asyncio.run(run_briefly())
+    assert any("reason=client_not_reading" in message for message in caplog.messages)
+    assert any(message.startswith("event=call_ended") for message in caplog.messages)

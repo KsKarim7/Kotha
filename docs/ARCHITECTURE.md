@@ -308,7 +308,10 @@ bot is busy; a further turn is dropped and logged, and the caller gets its `vad`
 reply. The browser's echo cancellation keeps the bot's own voice out of the microphone. The limit
 of 20 refused messages counts over the whole call, including audio sent before `start`, so a
 client should send `start` before it opens the microphone. Closing after a refused consent or too
-many refused messages uses code 1008 (policy violation); `stop` closes with 1000. After a handoff
+many refused messages uses code 1008 (policy violation); `stop` closes with 1000. A client that
+sends nothing for 30 s (a browser sends a frame every 20 ms) is closed with 1001 (going away), and
+a send that does not finish within 10 s, because the client stopped reading, ends the call; both
+log `event=call_timeout` with the reason `client_silent` or `client_not_reading`. After a handoff
 for failed turns the count starts again, so the call goes on if the caller keeps talking.
 
 Silero, ASR, the pipeline and TTS all share the default `asyncio.to_thread` pool. Under several

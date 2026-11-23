@@ -51,6 +51,11 @@ OUTGOING_LIMIT = 64
 GREETING_LANG: Language = "bn"
 MODEL_ERRORS = (RuntimeError, ValueError)
 POLICY_VIOLATION = 1008
+GOING_AWAY = 1001
+# a browser sends a 20 ms frame all call long, so this much silence means the client is gone
+CLIENT_SILENCE_TIMEOUT_S = 30.0
+# a client that stops reading lets the socket buffer fill, and every send then waits forever
+SEND_TIMEOUT_S = 10.0
 
 
 @dataclass(frozen=True)
@@ -144,7 +149,13 @@ class CallSession:
 
     async def _receive(self, detector: vad_turns.TurnDetector) -> None:
         while True:
-            message = await self._websocket.receive()
+            try:
+                with anyio.fail_after(CLIENT_SILENCE_TIMEOUT_S):
+                    message = await self._websocket.receive()
+            except TimeoutError:
+                log_event("call_timeout", call_id=self.call_id, reason="client_silent")
+                await self._outgoing.put(Close(GOING_AWAY))
+                return
             if message["type"] == "websocket.disconnect":
                 raise CallEnded
             if message.get("text") is not None:
@@ -284,12 +295,19 @@ class CallSession:
         while True:
             item = await self._outgoing.get()
             try:
-                if isinstance(item, Close):
-                    await self._websocket.close(item.code)
-                    raise CallEnded
-                if isinstance(item, bytes):
-                    await self._websocket.send_bytes(item)
-                else:
-                    await self._websocket.send_text(item.model_dump_json())
+                with anyio.fail_after(SEND_TIMEOUT_S):
+                    await self._deliver(item)
             except WebSocketDisconnect as disconnect:
                 raise CallEnded from disconnect
+            except TimeoutError:
+                log_event("call_timeout", call_id=self.call_id, reason="client_not_reading")
+                raise CallEnded from None
+
+    async def _deliver(self, item: Outgoing) -> None:
+        if isinstance(item, Close):
+            await self._websocket.close(item.code)
+            raise CallEnded
+        if isinstance(item, bytes):
+            await self._websocket.send_bytes(item)
+        else:
+            await self._websocket.send_text(item.model_dump_json())
