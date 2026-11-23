@@ -22,7 +22,7 @@ from kotha.llm.client import (
 API_KEY_VARIABLE = "GEMINI_API_KEY"
 PRIMARY_MODEL = "gemini-3.1-flash-lite"
 RETRY_MODEL = "gemini-3.5-flash-lite"
-# an overloaded free-tier model answers 503 within about a second, so one retry wastes the deadline
+# the retry model also returns 503 or stalls, so the deadline holds three capped attempts
 ATTEMPT_MODELS = (PRIMARY_MODEL, RETRY_MODEL, RETRY_MODEL)
 PRIMARY_REST_S = 60.0
 TOTAL_DEADLINE_S = 12.0

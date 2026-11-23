@@ -155,13 +155,13 @@ def test_two_overloaded_replies_still_end_in_an_answer() -> None:
 def test_an_overloaded_primary_rests_and_is_tried_again_after_its_rest(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(gemini, "PRIMARY_REST_S", 0.3)
+    monkeypatch.setattr(gemini, "PRIMARY_REST_S", 0.1)
     server = Server([status(503), answer("One."), answer("Two.")])
     client = client_for(server)
     assert client.generate("system", "first") == "One."
     assert client.generate("system", "second") == "Two."
     assert server.models() == ["gemini-3.1-flash-lite"] + ["gemini-3.5-flash-lite"] * 2
-    time.sleep(0.4)
+    time.sleep(0.3)
     assert client.generate("system", "third") == "Fine."
     assert server.models()[-1] == "gemini-3.1-flash-lite"
 
@@ -175,13 +175,59 @@ def test_a_resting_primary_leaves_two_attempts_on_the_retry_model() -> None:
     assert server.models()[2:] == ["gemini-3.5-flash-lite"] * 2
 
 
-def test_a_rejected_request_does_not_rest_the_primary() -> None:
-    server = Server([status(400), answer("Fine.")])
+@pytest.mark.parametrize(
+    ("failure", "expected"),
+    [
+        (status(400), LLMRequestError),
+        (answer("A cut-off ans", "MAX_TOKENS"), LLMEmptyResponseError),
+    ],
+)
+def test_a_rejected_request_or_incomplete_answer_does_not_rest_the_primary(
+    failure: httpx2.Response, expected: type[LLMError]
+) -> None:
+    server = Server([failure, answer("Fine.")])
     client = client_for(server)
-    with pytest.raises(LLMRequestError):
+    with pytest.raises(expected):
         client.generate("system", "first")
     client.generate("system", "second")
     assert server.models() == ["gemini-3.1-flash-lite"] * 2
+
+
+def stall_for(seconds: float) -> Handler:
+    def stall(request: httpx2.Request) -> httpx2.Response:
+        time.sleep(seconds)
+        return answer("Too late.")
+
+    return stall
+
+
+def test_a_primary_abandoned_at_its_budget_rests(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(gemini, "ATTEMPT_S", 0.2)
+    server = Server([stall_for(0.5), answer("One."), answer("Two.")])
+    client = client_for(server)
+    assert client.generate("system", "first") == "One."
+    assert client.generate("system", "second") == "Two."
+    assert server.models() == ["gemini-3.1-flash-lite"] + ["gemini-3.5-flash-lite"] * 2
+
+
+def test_a_resting_call_caps_its_first_attempt_and_gives_the_last_the_rest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(gemini, "ATTEMPT_S", 0.2)
+    monkeypatch.setattr(gemini, "TOTAL_DEADLINE_S", 3.0)
+    monkeypatch.setattr(gemini, "MIN_RETRY_S", 0.5)
+
+    def slower_than_one_attempt(request: httpx2.Request) -> httpx2.Response:
+        time.sleep(0.4)
+        return answer("In time.")
+
+    server = Server([status(503), answer("One."), stall_for(1.0), slower_than_one_attempt])
+    client = client_for(server)
+    client.generate("system", "first")
+    started = time.monotonic()
+    assert client.generate("system", "second") == "In time."
+    assert time.monotonic() - started < 1.0
+    assert server.models()[2:] == ["gemini-3.5-flash-lite"] * 2
 
 
 @pytest.mark.parametrize(
