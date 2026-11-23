@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 from collections.abc import Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
@@ -7,6 +8,7 @@ from pathlib import Path
 import numpy as np
 import psycopg
 import pytest
+from huggingface_hub import try_to_load_from_cache
 from psycopg.pq import TransactionStatus
 from psycopg.rows import TupleRow
 
@@ -14,12 +16,14 @@ from kotha.db.schema import EMBEDDING_DIMENSIONS, connect, prepare_database
 from kotha.kb.chunks import Chunk, chunk_documents
 from kotha.kb.documents import read_documents
 from kotha.kb.ingest import store_chunks
+from kotha.rag.embedder import MODEL_ID, MODEL_REVISION, Embedder
 from kotha.rag.retriever import (
     HybridRetriever,
     SparseRetriever,
     reciprocal_rank_fusion,
     search_tokens,
     stored_chunk,
+    table_rows,
 )
 from kotha.text.lexicon import LEXICON_PATH, read_lexicon
 
@@ -28,6 +32,10 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "")
 needs_database = pytest.mark.skipif(
     not DATABASE_URL and not os.environ.get("CI"), reason="DATABASE_URL is not set (outside CI)"
 )
+model_is_cached = isinstance(
+    try_to_load_from_cache(MODEL_ID, "pytorch_model.bin", revision=MODEL_REVISION), str
+)
+CODE = re.compile(r"N[TVC](?:-[A-Z0-9]+)+")
 LEXICON = {"ব্যালেন্স": "balance", "ব্যালান্স": "balance"}
 WORD_AXES = {"balance": 0, "voucher": 1, "roaming": 2}
 NO_KNOWN_WORD_AXIS = EMBEDDING_DIMENSIONS - 1
@@ -171,6 +179,65 @@ def test_sparse_search_on_the_real_knowledge_base() -> None:
     assert sparse.ranked_ids("roaming")[0].startswith("roaming.")
     assert sparse.ranked_ids("ব্যালান্স", use_lexicon=False) == []
     assert sparse.ranked_ids("ব্যালান্স")[0].startswith("balance-check.")
+
+
+def test_a_code_listed_once_in_a_table_row_outranks_chunks_that_repeat_it() -> None:
+    rows = "\n".join(f"| XY-{size}GB | {size} GB | 30 days | A pack |" for size in range(1, 30))
+    table = make_chunk("packs.en.0", "Packs", f"| Code | Data | Validity | Use |\n{rows}")
+    filler = " ".join(f"word{index}" for index in range(150))
+    mention = make_chunk(
+        "howto.en.0", "How to", f"Send XY-7GB to buy it. XY-7GB renews. Stop XY-7GB. {filler}"
+    )
+    other = make_chunk("other.en.0", "Other", "XY-9GB is mentioned here once.")
+    sparse = SparseRetriever([mention, table, other], LEXICON)
+    assert sparse.ranked_ids("XY-7GB")[0] == "packs.en.0"
+
+
+def test_equal_scores_are_ordered_by_chunk_id() -> None:
+    chunks = [make_chunk(f"same.en.{index}", "Same", "shared words") for index in (2, 0, 1)]
+    assert SparseRetriever([*chunks, *CHUNKS], LEXICON).ranked_ids("shared") == [
+        "same.en.0",
+        "same.en.1",
+        "same.en.2",
+    ]
+
+
+def catalogue_codes(chunks: Sequence[Chunk]) -> dict[str, str]:
+    listed = {}
+    for chunk in chunks:
+        for row in table_rows(chunk.text):
+            first_cell = row.strip("| ").split("|")[0].strip(" `")
+            if chunk.doc_id.startswith("packages-") and CODE.fullmatch(first_cell):
+                listed[first_cell] = chunk.doc_id
+    return listed
+
+
+def test_the_catalogue_lists_every_package_code() -> None:
+    codes = catalogue_codes(chunk_documents(read_documents(KB_FOLDER)))
+    assert len(codes) == 10 and {"NT-30GB", "NT-NIGHT-5GB", "NV-100", "NC-25GB"} <= set(codes)
+
+
+def test_bm25_finds_the_document_that_lists_each_package_code() -> None:
+    chunks = chunk_documents(read_documents(KB_FOLDER))
+    doc_ids = {chunk.id: chunk.doc_id for chunk in chunks}
+    sparse = SparseRetriever(chunks, read_lexicon(LEXICON_PATH))
+    for code, listing_doc in catalogue_codes(chunks).items():
+        top_docs = [doc_ids[chunk_id] for chunk_id in sparse.ranked_ids(code, limit=4)]
+        assert listing_doc in top_docs, code
+
+
+@needs_database
+@pytest.mark.skipif(not model_is_cached, reason="bge-m3 is not in the local Hugging Face cache")
+def test_hybrid_search_finds_the_document_that_lists_each_package_code(
+    empty_table: psycopg.Connection[TupleRow],
+) -> None:
+    chunks = chunk_documents(read_documents(KB_FOLDER))
+    embedder = Embedder()
+    store_chunks(empty_table, chunks, embedder)
+    retriever = HybridRetriever(empty_table, embedder, read_lexicon(LEXICON_PATH))
+    for code, listing_doc in catalogue_codes(chunks).items():
+        top_docs = [result.chunk.doc_id for result in retriever.search(code)]
+        assert listing_doc in top_docs, code
 
 
 @pytest.mark.parametrize("code", ["BAL", "7470", "01700000009"])

@@ -40,9 +40,3 @@ class BM25Okapi:
                 length_norm = K1 * (1 - B + B * relative_length)
                 totals[index] += idf * frequency * (K1 + 1) / (frequency + length_norm)
         return totals
-
-    def top(self, query_tokens: Sequence[str], limit: int) -> list[int]:
-        scored = [
-            (-score, index) for index, score in enumerate(self.scores(query_tokens)) if score > 0
-        ]
-        return [index for _, index in sorted(scored)[:limit]]
