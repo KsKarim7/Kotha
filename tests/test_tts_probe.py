@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from kotha.dialogue.routing import Language
+from kotha.tts.speakable import speakable_sentences
 from tts_probe import (
     REPO_ROOT,
     SENTENCES,
@@ -73,7 +74,20 @@ def test_the_listening_sentences_are_timed_as_the_app_would_speak_them() -> None
     sentences = listening_sentences()
     assert len(sentences) == 20
     assert {sentence.lang for sentence in sentences} == {"bn", "en"}
-    assert all(not any(char.isdigit() for char in sentence.text) for sentence in sentences)
+    for sentence in sentences:
+        assert speakable_sentences(sentence.text, sentence.lang) == [sentence.text]
+
+
+def test_a_row_with_two_sentences_is_timed_as_two_syntheses(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    sheet = tmp_path / "sentences.csv"
+    sheet.write_text("id,lang,category,text\nen-x,en,plain,Call us. Then wait.\n", encoding="utf-8")
+    monkeypatch.setattr("tts_probe.SENTENCES_PATH", sheet)
+    assert [(sentence.id, sentence.text) for sentence in listening_sentences()] == [
+        ("en-x.1", "call us"),
+        ("en-x.2", "then wait"),
+    ]
 
 
 def probe_result(
