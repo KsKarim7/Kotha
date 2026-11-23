@@ -72,12 +72,14 @@ def client_for(server: Server) -> GeminiClient:
 
 
 def test_the_settings_are_the_ones_the_adr_records() -> None:
-    assert (gemini.PRIMARY_MODEL, gemini.RETRY_MODEL) == (
+    assert gemini.ATTEMPT_MODELS == (
         "gemini-3.1-flash-lite",
+        "gemini-3.5-flash-lite",
         "gemini-3.5-flash-lite",
     )
     assert gemini.TOTAL_DEADLINE_S == 12.0
-    assert gemini.PRIMARY_ATTEMPT_S == 4.0
+    assert gemini.ATTEMPT_S == 4.0
+    assert gemini.PRIMARY_REST_S == 60.0
     assert gemini.MAX_OUTPUT_TOKENS == 512
 
 
@@ -134,10 +136,52 @@ def test_a_malformed_key_is_a_configuration_error(
         httpx2.Response(503, content=b"\xff\xfe not utf-8"),
     ],
 )
-def test_a_transient_failure_is_retried_once_on_the_second_model(failure: object) -> None:
+def test_a_transient_failure_is_retried_on_the_second_model(failure: object) -> None:
     server = Server([failure, answer("Recovered.")])
     assert client_for(server).generate("system", "question") == "Recovered."
     assert server.models() == ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite"]
+
+
+def test_two_overloaded_replies_still_end_in_an_answer() -> None:
+    server = Server([status(503), status(503), answer("Third time.")])
+    assert client_for(server).generate("system", "question") == "Third time."
+    assert server.models() == [
+        "gemini-3.1-flash-lite",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash-lite",
+    ]
+
+
+def test_an_overloaded_primary_rests_and_is_tried_again_after_its_rest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(gemini, "PRIMARY_REST_S", 0.3)
+    server = Server([status(503), answer("One."), answer("Two.")])
+    client = client_for(server)
+    assert client.generate("system", "first") == "One."
+    assert client.generate("system", "second") == "Two."
+    assert server.models() == ["gemini-3.1-flash-lite"] + ["gemini-3.5-flash-lite"] * 2
+    time.sleep(0.4)
+    assert client.generate("system", "third") == "Fine."
+    assert server.models()[-1] == "gemini-3.1-flash-lite"
+
+
+def test_a_resting_primary_leaves_two_attempts_on_the_retry_model() -> None:
+    server = Server([status(503), answer("One."), status(503), status(503)])
+    client = client_for(server)
+    client.generate("system", "first")
+    with pytest.raises(LLMUnavailableError):
+        client.generate("system", "second")
+    assert server.models()[2:] == ["gemini-3.5-flash-lite"] * 2
+
+
+def test_a_rejected_request_does_not_rest_the_primary() -> None:
+    server = Server([status(400), answer("Fine.")])
+    client = client_for(server)
+    with pytest.raises(LLMRequestError):
+        client.generate("system", "first")
+    client.generate("system", "second")
+    assert server.models() == ["gemini-3.1-flash-lite"] * 2
 
 
 @pytest.mark.parametrize(
@@ -149,12 +193,20 @@ def test_a_transient_failure_is_retried_once_on_the_second_model(failure: object
         (httpx2.ReadTimeout("slow"), LLMTimeoutError),
         (httpx2.ConnectError("refused"), LLMUnavailableError),
         (httpx2.Response(200, text="not json"), LLMUnavailableError),
-        (httpx2.Response(200, json={"candidates": "wrong"}), LLMEmptyResponseError),
     ],
 )
-def test_a_second_failure_raises_a_typed_error(failure: object, expected: type[LLMError]) -> None:
-    server = Server([status(503), failure])
+def test_the_third_transient_failure_raises_a_typed_error(
+    failure: object, expected: type[LLMError]
+) -> None:
+    server = Server([status(503), status(503), failure, answer("Never asked.")])
     with pytest.raises(expected):
+        client_for(server).generate("system", "question")
+    assert len(server.requests) == 3
+
+
+def test_an_incomplete_retry_answer_is_not_retried_again() -> None:
+    server = Server([status(503), httpx2.Response(200, json={"candidates": "wrong"})])
+    with pytest.raises(LLMEmptyResponseError):
         client_for(server).generate("system", "question")
     assert len(server.requests) == 2
 
@@ -169,7 +221,7 @@ def test_a_rejected_request_is_not_retried(code: int) -> None:
 
 def test_a_redirect_is_not_followed() -> None:
     redirect = httpx2.Response(307, headers={"location": "https://elsewhere.example/x"})
-    server = Server([redirect, redirect])
+    server = Server([redirect, redirect, redirect])
     with pytest.raises(LLMError):
         client_for(server).generate("system", "question")
     assert all(request.url.host != "elsewhere.example" for request in server.requests)
@@ -206,7 +258,7 @@ def test_errors_carry_no_provider_text_key_or_prompt() -> None:
 def test_a_slow_attempt_is_abandoned_at_its_budget_and_the_retry_gets_the_rest(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(gemini, "PRIMARY_ATTEMPT_S", 0.2)
+    monkeypatch.setattr(gemini, "ATTEMPT_S", 0.2)
     monkeypatch.setattr(gemini, "TOTAL_DEADLINE_S", 3.0)
     monkeypatch.setattr(gemini, "MIN_RETRY_S", 0.5)
 
@@ -220,8 +272,30 @@ def test_a_slow_attempt_is_abandoned_at_its_budget_and_the_retry_gets_the_rest(
     assert time.monotonic() - started < 1.0
 
 
+def test_a_stalled_retry_is_abandoned_and_the_last_attempt_gets_the_rest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(gemini, "ATTEMPT_S", 0.2)
+    monkeypatch.setattr(gemini, "TOTAL_DEADLINE_S", 3.0)
+    monkeypatch.setattr(gemini, "MIN_RETRY_S", 0.5)
+
+    def stall(request: httpx2.Request) -> httpx2.Response:
+        time.sleep(1.0)
+        return answer("Too late.")
+
+    def slower_than_one_attempt(request: httpx2.Request) -> httpx2.Response:
+        time.sleep(0.4)
+        return answer("In time.")
+
+    server = Server([status(503), stall, slower_than_one_attempt])
+    started = time.monotonic()
+    assert client_for(server).generate("system", "question") == "In time."
+    assert time.monotonic() - started < 1.0
+    assert len(server.requests) == 3
+
+
 def test_no_retry_starts_when_too_little_time_is_left(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(gemini, "PRIMARY_ATTEMPT_S", 0.3)
+    monkeypatch.setattr(gemini, "ATTEMPT_S", 0.3)
     monkeypatch.setattr(gemini, "TOTAL_DEADLINE_S", 0.6)
     monkeypatch.setattr(gemini, "MIN_RETRY_S", 0.5)
 
@@ -300,7 +374,7 @@ def test_a_real_stalled_socket_frees_its_worker_at_the_backstop(
 ) -> None:
     monkeypatch.setattr(gemini, "BACKSTOP_TIMEOUT_MS", 300)
     monkeypatch.setattr(gemini, "WORKER_THREADS", 1)
-    monkeypatch.setattr(gemini, "PRIMARY_ATTEMPT_S", 0.1)
+    monkeypatch.setattr(gemini, "ATTEMPT_S", 0.1)
     monkeypatch.setattr(gemini, "TOTAL_DEADLINE_S", 0.15)
     with socket.create_server(("127.0.0.1", 0)) as silent_server:
         host, port = silent_server.getsockname()
