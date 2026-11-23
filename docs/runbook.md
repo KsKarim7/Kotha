@@ -337,8 +337,8 @@ cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
   then speak. Use headphones if echo cancellation lets the bot's voice back in.
 - `KOTHA_ASR_MODEL` is required: a faster-whisper model name or a local CTranslate2 folder.
   `KOTHA_ASR_DEVICE` defaults to `cpu`; use `cuda` only after the GPU check above.
-  `KOTHA_ASR_COMPUTE_TYPE` defaults to `int8`, the CPU setting; the cuda runs so far used
-  `int8_float16`, and the live choice waits for M3-6.
+  `KOTHA_ASR_COMPUTE_TYPE` defaults to `int8`, the CPU setting; ADR 0005's measurements and the
+  cuda WER run used `int8_float16`, and the live choice waits for M3-6.
 - `--ws-max-size 65536` keeps uvicorn from buffering frames far larger than the one-second limit
   the app enforces (32,000 bytes).
 - Startup loads every model and warms it: Silero once, the voices through the fixed prompts,
