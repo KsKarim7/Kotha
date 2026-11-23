@@ -389,13 +389,17 @@ cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
 ## Browser smoke test (manual, not in CI)
 
 `eval/browser_smoke.py` makes one call through the real page in headless Chromium. It synthesises
-the question with the MMS voice (12 s of silence first, so it is spoken after the greeting) and
+the question with the MMS voice (15 s of silence first, so that it is normally spoken after the
+greeting of about 9 s; an overlap is queued by the app but meets echo cancellation) and
 starts Chromium with `--use-fake-ui-for-media-stream` (grant the microphone),
 `--use-fake-device-for-media-stream` and `--use-file-for-fake-audio-capture=<wav>%noloop` (the WAV
 is the microphone). It ticks consent, presses Start, watches the page's WebSocket and presses End.
-It checks that the greeting's audio arrives, the question is transcribed, a cited answer is shown
-and its audio arrives, and End closes the socket and resets the page. It prints only those results,
-the reply kinds, handoff reasons and cited document ids, and exits 1 if a check fails.
+It checks that the greeting's audio arrives (before its `reply_audio_end`), the question is
+transcribed, a cited answer is shown with its "Sources" note and its own audio arrives, and End
+closes the socket and resets the page ("Call ended.", Start enabled). It waits for the first turn's
+`timing` (up to 150 s, which includes the page's wait for `/v1/ready`; `timed_out` says if it ran
+out), so a first turn that is "please repeat" or split ends the check early. It prints only the
+results, the reply kinds, handoff reasons and cited document ids, and exits 1 if a check fails.
 
 One-time setup: `uv run --with playwright playwright install chromium` (into
 `~/.cache/ms-playwright`, no sudo). Headless Chromium needs the system packages `libnss3` and

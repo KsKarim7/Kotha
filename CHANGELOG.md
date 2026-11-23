@@ -59,10 +59,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The first latency results in `EVALUATION.md`: p50 and p95 per stage and TTFA for 56 warm, answered turns of synthetic spoken questions on the CPU, with cold start reported separately, from one committed run of `eval/latency.py`.
 - A Docker stack: a CPU-only app image (`Dockerfile`, Python 3.11.18 slim with uv 0.13.7, the locked runtime dependencies without the `gpu` group, no model weights) and an `app` service in `docker-compose.yml` that waits for a healthy database, reads the models from read-only mounts of the Hugging Face cache and `models/`, and is healthy once `/v1/ready` answers; ingestion is one `docker compose run` command, and the README has a "Run the stack" quick start.
 - Milestone 1 documentation: the README describes what works now, the results with their runs, and the limits; `docs/ARCHITECTURE.md` has an overview diagram and sections on the knowledge base, retrieval and the answer pipeline; `EVALUATION.md` says what each unmeasured result needs; a sprint review in `docs/sprints/2026-W47.md`; and study-log rows for the remaining modules.
+- `eval/browser_smoke.py`: a manual smoke test that makes one call through the real page in headless Chromium with a synthetic microphone (runbook, "Browser smoke test").
 
 ### Changed
-
-- `eval/browser_smoke.py`: a manual smoke test that makes one call through the real page in headless Chromium with a synthetic microphone (runbook, "Browser smoke test").
 
 - `eval/tts_probe.py --sentences listening` times the 20 listening-sheet sentences as the app would speak them, writes per-sentence timings, and logs RTF p50/p95 per voice to MLflow (`kotha-tts`) with the git tags.
 - The loanword lexicon moved from `data/testsets/loanwords.csv` to `data/lexicon/loanwords.csv`, because the running service reads it for query expansion (ADR 0006); the CTranslate2 conversion now uses the project's own transformers, checked to give byte-identical models.
