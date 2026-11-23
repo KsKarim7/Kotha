@@ -143,14 +143,23 @@ async def speak_and_listen(
     websocket: ClientConnection, clip: np.ndarray, result: TurnResult
 ) -> None:
     await websocket.send(START)
-    if not await skip_greeting(websocket):
+    silence = float_to_pcm16(np.zeros(FRAME_SAMPLES, dtype=np.float32))
+    # like a browser, keep sending frames while the greeting plays, or the app hangs up on silence
+    greeting_silence = asyncio.create_task(
+        send_paced(websocket, repeat(silence), frame_clock(time.perf_counter()))
+    )
+    try:
+        greeted = await skip_greeting(websocket)
+    finally:
+        greeting_silence.cancel()
+        await asyncio.gather(greeting_silence, return_exceptions=True)
+    if not greeted:
         result.failure = "closed_before_greeting_ended"
         return
     speech = speech_frames(clip)
     clock = frame_clock(time.perf_counter())
     last_frame_due = await send_paced(websocket, speech, clock)
     speech_end = last_frame_due + len(speech[-1]) / 2 / SAMPLE_RATE_HZ
-    silence = float_to_pcm16(np.zeros(FRAME_SAMPLES, dtype=np.float32))
     silence_task = asyncio.create_task(send_paced(websocket, repeat(silence), clock))
     vad_end = first_audio = None
     timing: dict[str, float | None] = {}
