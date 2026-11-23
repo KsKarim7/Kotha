@@ -265,9 +265,10 @@ class CallSession:
             handoff_reason=reply.handoff_reason,
             rejections=list(reply.rejections),
         )
-        await self._outgoing.put(timing)
+        # timing is the last event of every turn, so a client can stop reading there
         if reply.handoff_reason is not None:
             await self._outgoing.put(Handoff(reason=reply.handoff_reason))
+        await self._outgoing.put(timing)
 
     def _failed_turn_reply(self) -> BotReply:
         self._failed_turns += 1

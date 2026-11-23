@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -11,6 +12,14 @@ def test_the_image_is_pinned_and_installs_the_locked_cpu_dependencies_only() -> 
     assert "ghcr.io/astral-sh/uv:0.13.7" in DOCKERFILE
     assert DOCKERFILE.count("uv sync --frozen --no-dev --no-group gpu") == 2
     assert "HF_HUB_OFFLINE=1" in DOCKERFILE
+
+
+def test_compose_and_ci_run_the_same_database_image_pinned_by_digest() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    pinned = re.compile(r"image: (pgvector/pgvector:0\.8\.7-pg16@sha256:[0-9a-f]{64})$", re.M)
+    [compose_image] = pinned.findall(COMPOSE)
+    [ci_image] = pinned.findall(workflow)
+    assert compose_image == ci_image
 
 
 def test_secrets_weights_and_test_audio_stay_out_of_the_build_context() -> None:

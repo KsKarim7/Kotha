@@ -107,7 +107,8 @@ cd ~/kotha && uv run python eval/gpu_bench.py --model models/bn-arif11-v7-small-
 ## Local database
 
 The knowledge base lives in PostgreSQL 16 with pgvector, from the pinned image
-`pgvector/pgvector:0.8.7-pg16` (ADR 0006). Docker Desktop must be running with WSL integration on.
+`pgvector/pgvector:0.8.7-pg16` (ADR 0006), pinned by its index digest in `docker-compose.yml` and
+CI, so a re-pushed tag cannot change it. Docker Desktop must be running with WSL integration on.
 
 One-time setup: copy `.env.example` to `.env` and replace the placeholders. `.env` is git-ignored;
 never commit it. Make the password with `openssl rand -hex 24`: characters such as `/`, `@`, `%`,

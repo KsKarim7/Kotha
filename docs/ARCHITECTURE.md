@@ -241,12 +241,13 @@ connection is one call. Messages are Pydantic models in `kotha.api.protocol`.
 | `transcript` | a turn passed ASR and the gate | `text`, `final` (always true in MS1) |
 | `bot_text` | before the bot speaks | `kind` (`greeting`, `answer`, `account_unavailable`, `handoff`, `repeat`), `lang`, `text`, `citations` (`doc_id`, `title`, one per document) |
 | `reply_audio_end` | after the last audio frame of a reply (an addition) | none |
-| `handoff` | after a handoff reply has been spoken | `reason` (`no_answer`, `rejected_twice`, `no_time_to_retry`, `llm_timeout`, `llm_unavailable`, `llm_rate_limited`, `llm_error`, `retrieval_failed`, `failed_turns`), also logged on the `reply` event and shown on the page; the blueprint's summary comes with M6-full |
+| `handoff` | after a handoff reply has been spoken, before the turn's `timing` | `reason` (`no_answer`, `rejected_twice`, `no_time_to_retry`, `llm_timeout`, `llm_unavailable`, `llm_rate_limited`, `llm_error`, `retrieval_failed`, `failed_turns`), also logged on the `reply` event and shown on the page; the blueprint's summary comes with M6-full |
 | `error` | a message was refused or TTS failed | `code` |
 | `playback_stop` | not sent in MS1; it belongs to barge-in (MS2) | |
 
 Every reply is one `bot_text`, then one binary frame per sentence, then `reply_audio_end`. A
-reply to a caller's turn is followed by a `timing` event (an addition) with `asr_seconds`,
+reply to a caller's turn ends with a `timing` event (an addition; after `reply_audio_end` and any
+`handoff`, so it is always the turn's last event) with `asr_seconds`,
 `retrieval_seconds`, `llm_seconds` and `tts_first_audio_seconds`, each `null` when that stage did
 not run; `eval/latency.py` reads it, and each value is also logged as `event=stage`. It also
 carries the reply `kind`, the `handoff_reason` (`null` unless a handoff) and `rejections`, the
