@@ -38,8 +38,7 @@ checked on the date above; numbered sources are under References.
 - The first attempt uses `gemini-3.1-flash-lite`. Up to two retries, on a timeout, rate limit, 5xx
   or connection failure, use `gemini-3.5-flash-lite`, so a retry does not depend on the same
   overloaded model. Rejected requests and empty or incomplete answers are not retried.
-- After a transient failure, `gemini-3.1-flash-lite` rests for 60 s: calls in that time start on
-  `gemini-3.5-flash-lite` and get two attempts. The first call after the rest tries it again.
+- Every call starts on `gemini-3.1-flash-lite`, even right after it failed (see the second update).
 - `generate` has a hard deadline of 12 s in total. Every attempt but the last gets at most 4 s, a
   retry runs only if at least 2 s are left, and the last attempt gets whatever remains. Each attempt
   runs on a pool of 16 workers and is abandoned at its budget. The 2 s rule is a guard for other
@@ -64,9 +63,19 @@ on this key that day, recording only status codes and timings (not measurements,
   several seconds.
 - With one retry, the retry inherited about 11 s, and a stalled request used all of it.
 
-Hence the extra retry, the 4 s cap on all but the last attempt, and the rest for the primary. The
-free tier's capacity stays outside this code: when both models are overloaded, the call still
-hands off.
+Hence the extra retry and the 4 s cap on all but the last attempt. The free tier's capacity stays
+outside this code: when both models are overloaded, the call still hands off.
+
+## Update 2026-11-24: no rest for the primary
+The first update also let `gemini-3.1-flash-lite` rest for 60 s after a transient failure, to save
+the second or so a 503 costs. The next committed latency run (MLflow `d4a53096`, CPU) handed off
+28 of 72 turns, 24 of them `no_answer`, where the MS1 run handed off 14. While the primary rested,
+nearly every answer came from `gemini-3.5-flash-lite`. A diagnostic probe sent the app's own
+prompts for some of those turns to both models (not a measurement): the primary's answers passed
+the verifier every time, while `gemini-3.5-flash-lite` often replied `NO_ANSWER` although the gold
+passage was among the four, and retrieval gave the same passages before and after #68. So the
+rest is removed: every call starts on the primary again. The cost is the time of a fast 503 on
+each turn while the primary is overloaded.
 
 ## Alternatives considered
 - **`google-generativeai`:** deprecated [1].
@@ -92,10 +101,10 @@ hands off.
 - **Slow answers are cut off.** An attempt that is not the last gets 4 s. When the first two
   attempts time out, the last gets 4 s too, where the old single retry got about 8 s, so an answer
   that would have taken 5-8 s now ends in a handoff. Fast failures (a quick 503) leave the last
-  attempt most of the deadline, and a resting call's last attempt gets about 8 s.
-- **A resting primary.** While it rests, a call has two attempts, not three, and a primary that
-  recovers is found within a minute. A primary attempt that times out because the worker pool is
-  full of abandoned attempts also rests it, although the model did not fail.
+  attempt most of the deadline.
+- **The two models are not interchangeable.** `gemini-3.5-flash-lite` declines more answerable
+  questions with `NO_ANSWER`, so when the primary is overloaded, more turns hand off. Choosing the
+  retry model by answer rate needs its own evaluation; until then the primary goes first.
 - **More load during an overload.** Each turn can send three requests, and abandoned ones keep
   running on the server until `X-Server-Timeout`, so the client can add to its own 503s and 429s.
 - **Unexpected exceptions are not hidden.** Only known transport and parse failures become typed
