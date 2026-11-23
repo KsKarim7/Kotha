@@ -90,12 +90,11 @@ def asr_options() -> dict[str, str]:
 
 
 def load_live_services(resources: ExitStack) -> CallServices:
-    configure_logging()
-    with logged_duration("imports"):
-        from kotha.asr.whisper import WhisperAsr
-        from kotha.dialogue.chat import live_pipeline
-        from kotha.tts.service import load_tts_service
+    from kotha.asr.whisper import WhisperAsr
+    from kotha.dialogue.chat import live_pipeline
+    from kotha.tts.service import load_tts_service
 
+    configure_logging()
     database_url = os.environ.get("DATABASE_URL")
     asr_model = os.environ.get("KOTHA_ASR_MODEL")
     if not database_url or not asr_model:

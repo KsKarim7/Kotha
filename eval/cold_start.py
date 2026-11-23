@@ -9,11 +9,29 @@ from tracking import git_tags, log_run, open_experiment
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXPERIMENT_NAME = "kotha-cold-start"
-STEP_LINE = re.compile(r"event=startup_step seconds=(\d+(?:\.\d+)?) stage=(\w+)")
+STEP_LINE = re.compile(r"event=startup_step seconds=(\d+(?:\.\d+)?) stage=([A-Za-z][\w.-]*)")
+EXPECTED_STEPS = (
+    "asr_load",
+    "llm_client",
+    "embedder_load",
+    "retriever_index",
+    "tts_load_bn",
+    "tts_load_en",
+    "tts_prompts_bn",
+    "tts_prompts_en",
+    "vad_warm_up",
+    "asr_warm_up_speech",
+    "asr_warm_up",
+    "retrieval_warm_up",
+)
 
 
 def startup_steps(server_log: str) -> dict[str, float]:
-    return {stage: float(seconds) for seconds, stage in STEP_LINE.findall(server_log)}
+    steps = {stage: float(seconds) for seconds, stage in STEP_LINE.findall(server_log)}
+    missing = [step for step in EXPECTED_STEPS if step not in steps]
+    if missing:
+        raise ValueError(f"the server log has no time for: {', '.join(missing)}")
+    return steps
 
 
 def breakdown(

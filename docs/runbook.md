@@ -458,17 +458,19 @@ cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
 ## Cold start
 
 At startup the app logs how long each step took, as numbers only:
-`event=startup_step seconds=<s> stage=<step>`. The steps, in order: `imports` (the ASR, pipeline
-and TTS modules, which bring torch and transformers), `asr_load`, `llm_client`, `embedder_load`,
-`retriever_index` (reading the chunks and building BM25), `tts_load_bn`, `tts_load_en`,
-`tts_prompts_bn`, `tts_prompts_en` (synthesising and caching the fixed replies), `vad_warm_up`
-(loading Silero and one window), `asr_warm_up_speech` (synthesising the warm-up sentence),
-`asr_warm_up` and `retrieval_warm_up` (the first search). The database connection is not a step.
+`event=startup_step seconds=<s> stage=<step>`. The steps, in order: `asr_load`, `llm_client`,
+`embedder_load` (it also pays for importing torch and transformers, which sentence-transformers
+imports first), `retriever_index` (reading the chunks and building BM25), `tts_load_bn`,
+`tts_load_en`, `tts_prompts_bn`, `tts_prompts_en` (synthesising and caching the fixed replies),
+`vad_warm_up` (loading Silero and one window), `asr_warm_up_speech` (synthesising the warm-up
+sentence), `asr_warm_up` and `retrieval_warm_up` (the first search). The database connection is
+not a step.
 
 `eval/cold_start.py` starts the app alone, waits for `/v1/ready`, stops it, and reports every step
-plus `other_startup` (startup time the steps do not cover), `before_startup` (process start to the
-start of the lifespan: Python, uvicorn and the app module) and the totals. Run it with nothing else
-loading models, and on cuda only after the GPU check:
+plus `other_startup` (startup time the steps do not cover), `before_startup` (everything outside
+the app's startup: Python, uvicorn and the app module with faster-whisper, and up to 0.5 s of
+readiness polling) and the totals. It stops with an error if a step is missing from the log. Run
+it with nothing else loading models, and on cuda only after the GPU check:
 
 ```bash
 cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
