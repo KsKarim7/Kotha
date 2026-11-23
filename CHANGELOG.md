@@ -71,7 +71,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- The app sent a handoff's `handoff` event after the turn's `timing`, which the latency harness takes as the end of the turn: `timing` is now always a turn's last event, and the harness records a `handoff_mismatch` failure when a handoff turn lacks its event. The pgvector image is pinned by digest in compose and CI.
+- The app sent a handoff's `handoff` event after the turn's `timing`, which the latency harness takes as the end of the turn: `timing` is now always a turn's last event, and the harness records a `handoff_mismatch` failure when a handoff turn lacks its event or the two reasons differ. The pgvector image is pinned by digest in compose and CI.
 - A call could hang on a client that stopped sending or reading: a client silent for 30 s is closed with 1001, and a send that waits more than 10 s ends the call. The latency harness sends silence while the greeting plays, as a browser does.
 - Calls handed off when Gemini's free tier was overloaded: `GeminiClient` now makes up to three attempts within its 12 s deadline (at most 4 s for each but the last) and rests `gemini-3.1-flash-lite` for 60 s after a transient failure (ADR 0007 update).
 - Clock times were spoken as "eighteen o'clock": they are now read on a 12-hour clock with the time of day, "six in the evening", "midnight", "noon", and "সন্ধ্যা ছয়টা", "রাত বারোটা" (the Bangla period word is left out when the text already names one).

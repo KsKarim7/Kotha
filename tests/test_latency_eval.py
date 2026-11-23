@@ -126,8 +126,11 @@ def scripted_server(
     close_in_greeting: bool = False,
     timing: dict[str, object] = TIMING,
     kind: str = "answer",
-    send_handoff: bool = True,
+    handoff_event_reason: str | None = None,
 ) -> Callable[[ServerConnection], Awaitable[None]]:
+    if handoff_event_reason is None:
+        handoff_event_reason = str(timing.get("handoff_reason") or "")
+
     async def handle(websocket: ServerConnection) -> None:
         assert json.loads(await websocket.recv())["type"] == "start"
         await websocket.send(json.dumps({"type": "bot_text", "kind": "greeting"}))
@@ -146,8 +149,8 @@ def scripted_server(
                     await websocket.send(json.dumps({"type": "bot_text", "kind": kind}))
                     await websocket.send(b"\x01\x00" * 160)
                 await websocket.send(json.dumps({"type": "reply_audio_end"}))
-                if timing.get("handoff_reason") and send_handoff:
-                    handoff = {"type": "handoff", "reason": timing["handoff_reason"]}
+                if handoff_event_reason:
+                    handoff = {"type": "handoff", "reason": handoff_event_reason}
                     await websocket.send(json.dumps(handoff))
                 await websocket.send(json.dumps(timing))
 
@@ -177,8 +180,16 @@ def test_a_turn_skips_the_greeting_audio_and_measures_every_stage() -> None:
 def test_a_handoff_turn_without_its_handoff_event_is_a_failure() -> None:
     handoff_timing = {**TIMING, "kind": "handoff", "handoff_reason": "no_answer"}
     server = scripted_server(
-        speech_end_after=CLIP_FRAMES + 3, timing=handoff_timing, kind="handoff", send_handoff=False
+        speech_end_after=CLIP_FRAMES + 3,
+        timing=handoff_timing,
+        kind="handoff",
+        handoff_event_reason="",
     )
+    assert measured(server).failure == "handoff_mismatch"
+
+
+def test_a_handoff_event_on_a_turn_whose_timing_has_no_reason_is_a_failure() -> None:
+    server = scripted_server(speech_end_after=CLIP_FRAMES + 3, handoff_event_reason="no_answer")
     assert measured(server).failure == "handoff_mismatch"
 
 
@@ -192,6 +203,7 @@ def test_a_handoff_turn_records_its_reason_and_rules_in_the_csv(tmp_path: Path) 
     handoff = scripted_server(speech_end_after=CLIP_FRAMES + 3, timing=rejected, kind="handoff")
     result = measured(handoff)
     assert result.kind == "handoff" and not counted(result)
+    assert result.failure == ""
     assert (result.handoff_reason, result.rejections) == (
         "rejected_twice",
         "unsupported_number;too_long",
