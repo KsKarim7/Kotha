@@ -63,7 +63,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - `eval/tts_probe.py --sentences listening` times the 20 listening-sheet sentences as the app would speak them, writes per-sentence timings, and logs RTF p50/p95 per voice to MLflow (`kotha-tts`) with the git tags.
-
 - The loanword lexicon moved from `data/testsets/loanwords.csv` to `data/lexicon/loanwords.csv`, because the running service reads it for query expansion (ADR 0006); the CTranslate2 conversion now uses the project's own transformers, checked to give byte-identical models.
 - The lexicon reader moved from `eval/wer.py` to `kotha.text.lexicon`, so the running service does not import from `eval/`.
 - `uv sync` now installs `kotha` as an editable package, so scripts can import it without `PYTHONPATH`.

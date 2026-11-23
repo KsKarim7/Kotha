@@ -103,12 +103,13 @@ def print_result(result: ProbeResult) -> None:
 
 def listening_sentences() -> list[ProbeSentence]:
     # the app speaks the normalised text, so that is what the voice is timed on
-    return [
-        ProbeSentence(
-            sentence.id, sentence.lang, " ".join(speakable_sentences(sentence.text, sentence.lang))
-        )
-        for sentence in read_sentences(SENTENCES_PATH)
-    ]
+    timed: list[ProbeSentence] = []
+    for sentence in read_sentences(SENTENCES_PATH):
+        spoken = speakable_sentences(sentence.text, sentence.lang)
+        for number, text in enumerate(spoken, 1):
+            sentence_id = sentence.id if len(spoken) == 1 else f"{sentence.id}.{number}"
+            timed.append(ProbeSentence(sentence_id, sentence.lang, text))
+    return timed
 
 
 def real_time_factors(results: Sequence[ProbeResult]) -> dict[str, float]:
@@ -154,8 +155,11 @@ def main() -> None:
     output_dir: Path = args.output_dir.resolve()
     if output_dir.is_relative_to(REPO_ROOT):
         parser.error(f"--output-dir {output_dir} must be outside the repository")
+    if args.mlflow_dir and args.mlflow_dir.resolve().is_relative_to(REPO_ROOT):
+        parser.error(f"--mlflow-dir {args.mlflow_dir} must be outside the repository")
     output_dir.mkdir(parents=True, exist_ok=True)
     tags = git_tags(REPO_ROOT)
+    tracking = open_experiment(args.mlflow_dir, EXPERIMENT_NAME) if args.mlflow_dir else None
     sentences = listening_sentences() if args.sentences == "listening" else list(SENTENCES)
 
     import torch
@@ -176,8 +180,8 @@ def main() -> None:
         print(f"{name}: {value:.3f}")
     timings = output_dir / "timings.csv"
     write_timings(timings, results)
-    if args.mlflow_dir:
-        client, experiment = open_experiment(args.mlflow_dir, EXPERIMENT_NAME)
+    if tracking is not None:
+        client, experiment = tracking
         params = {
             "sentences": args.sentences,
             "device": "cpu",
