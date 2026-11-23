@@ -234,7 +234,8 @@ class CallSession:
             await self._outgoing.put(TranscriptEvent(text=transcript.text))
             reply = await asyncio.to_thread(self._services.pipeline.reply, transcript.text)
             self._lang = reply.lang
-        log_event("reply", call_id=self.call_id, kind=reply.kind.value, lang=reply.lang)
+        reason = {"reason": reply.handoff_reason.value} if reply.handoff_reason else {}
+        log_event("reply", call_id=self.call_id, kind=reply.kind.value, lang=reply.lang, **reason)
         tts_first_audio_seconds = await self._speak(bot_text(reply))
         timing = Timing(
             asr_seconds=asr_seconds,

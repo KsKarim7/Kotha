@@ -3,6 +3,17 @@ const READY_POLL_MS = 1000;
 const READY_REQUEST_TIMEOUT_MS = 3000;
 const READY_MAX_WAIT_MS = 120000;
 const STOP_GRACE_MS = 2000;
+const HANDOFF_REASONS = {
+  no_answer: "the knowledge base does not answer this question",
+  rejected_twice: "two answers failed the citation checks",
+  no_time_to_retry: "the answer failed the citation checks and there was no time to retry",
+  llm_timeout: "the language model did not answer in time",
+  llm_unavailable: "the language model is overloaded or unreachable",
+  llm_rate_limited: "the language model's quota is used up",
+  llm_error: "the language model refused the request or gave no complete answer",
+  retrieval_failed: "the knowledge base search failed",
+  failed_turns: "two turns in a row could not be understood",
+};
 
 const consent = document.getElementById("consent");
 const startButton = document.getElementById("start");
@@ -169,7 +180,8 @@ function show(pending, event) {
     const titles = event.citations.map((citation) => citation.title);
     addLine("bot", `Kotha: ${event.text}`, titles, event.lang);
   } else if (event.type === "handoff") {
-    status.textContent = "An agent would take over now (demo).";
+    const reason = HANDOFF_REASONS[event.reason] || event.reason;
+    status.textContent = `An agent would take over now (demo). Why: ${reason}.`;
   } else if (event.type === "reply_audio_end") {
     status.textContent = "Your turn.";
   } else if (event.type === "error") {

@@ -8,6 +8,7 @@ from test_api_session import FakeAsr, FakePipeline, FakeTts, loud_probability
 
 from kotha.api.app import STATIC_DIR, create_app
 from kotha.api.session import CallServices
+from kotha.dialogue.answer import HandoffReason
 
 CLIENT_FILES = ("index.html", "call.js", "pcm-worklet.js", "call.css")
 
@@ -65,6 +66,13 @@ def test_the_client_follows_the_call_protocol() -> None:
         assert f'event.type === "{event}"' in script
     assert "TARGET_RATE = 16000" in worklet and "FRAME_SAMPLES = 320" in worklet
     assert "Int16Array" in worklet
+
+
+def test_the_page_explains_every_handoff_reason() -> None:
+    script = (STATIC_DIR / "call.js").read_text(encoding="utf-8")
+    for reason in HandoffReason:
+        assert re.search(rf'^  {reason.value}: "[^"]+",$', script, re.MULTILINE), reason
+    assert "HANDOFF_REASONS[event.reason]" in script
 
 
 def test_the_page_waits_for_readiness_before_the_microphone() -> None:
