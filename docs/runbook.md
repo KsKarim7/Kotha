@@ -350,8 +350,9 @@ cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
   from process start to ready also includes Python imports and is measured from outside.
 - Logs carry only event names, call ids, reply kinds, languages, handoff reasons, verifier rule
   names and error codes; never what the caller or the bot said.
-- For `rejected_twice` or `no_time_to_retry`, the rules the answers broke are logged as
-  `event=answer_rejected reason=<rule>` lines with the same `call_id`.
+- When an answer of a handed-off turn was rejected (always for `rejected_twice` and
+  `no_time_to_retry`, and for an `llm_*` or `no_answer` handoff after a retry), the rules it broke
+  are logged as `event=answer_rejected reason=<rule>` lines with the same `call_id`.
 - After a handoff the page says why, and the log has it:
   `docker compose logs app | grep 'event=reply.*reason='` (or the uvicorn output). An LLM reason
   names how the last attempt failed; earlier attempts may have failed differently. They point
