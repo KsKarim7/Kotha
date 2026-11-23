@@ -266,8 +266,22 @@ cd ~/kotha && HF_HUB_OFFLINE=1 uv run python eval/tts_probe.py \
 - The tokenizer drops every character outside the voice's `vocab.json` without a warning, so a
   `dropped:` line means that character is never spoken. The blank token, `6` for Bangla and `k`
   for English, is listed as dropped too: the tokenizer gives it the blank's id (ADR 0009).
-- The timings are from one run on whatever the CPU is doing at the time; they are not results for
-  `EVALUATION.md`.
+- The timings of these probe runs are not results for `EVALUATION.md`.
+
+For the RTF in `EVALUATION.md`, time the 20 listening-sheet sentences as the app would speak them
+(after the speakable-text step), on the CPU, from a clean checkout and with nothing else running:
+
+```bash
+cd ~/kotha && HF_HUB_OFFLINE=1 uv run python eval/tts_probe.py --sentences listening \
+  --output-dir ~/kotha-runs/tts-rtf --mlflow-dir ~/kotha-runs/mlflow
+```
+
+- RTF is synthesis time over audio length, per sentence, after one untimed warm-up synthesis per
+  voice. The script prints and logs p50 and p95 per voice (`rtf.bn.*`, `rtf.en.*`, with the
+  sentence counts: 14 bn and 6 en, so the en p95 rests on six values) to the `kotha-tts`
+  experiment, with the git tags, the voices' revisions, the seed, the torch thread count and the
+  sheet's SHA-256. `timings.csv` in `--output-dir` has one row per sentence and is the run's
+  artifact.
 
 ### Listening test
 
