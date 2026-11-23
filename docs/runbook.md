@@ -408,10 +408,12 @@ printed so any cold effect is visible. The percentiles count only turns that got
 served from the TTS cache, so its `tts_first_audio` is near zero, and some of those turns never
 reach the LLM; mixing them in would hide the answer path. The cost: a slow LLM path that ends in a
 handoff (`no_answer`, `rejected_twice`, an `llm_*` reason) is left out too, which biases `llm` and
-`ttfa` low. The script prints the counted turns, the split turns, the reply kinds and the failures
-(timeout, connection closed, connect failed, bad event, no audio), warns when fewer than 30 turns
-are counted (the blueprint's minimum), and writes one row per turn to `--output`, which must be
-outside the repository. A failed turn is recorded and the run goes on.
+`ttfa` low. The script prints the counted turns, the split turns, the reply kinds, the handoff
+reasons and the failures (timeout, connection closed, connect failed, bad event, no audio), warns
+when fewer than 30 turns are counted (the blueprint's minimum), and writes one row per turn to
+`--output`, which must be outside the repository. Each row has the reply `kind`, its
+`handoff_reason` and the verifier `rejections` (rule names joined by `;`) from the `timing` event;
+MLflow gets one `handoffs.<reason>` count per reason. A failed turn is recorded and the run goes on.
 
 ```bash
 cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \

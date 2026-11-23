@@ -20,6 +20,7 @@ from kotha.api.protocol import (
     Ready,
     ReplyAudioEnd,
     ServerEvent,
+    StageSeconds,
     Start,
     Timing,
     TranscriptEvent,
@@ -236,15 +237,23 @@ class CallSession:
             self._lang = reply.lang
         reason = {"reason": reply.handoff_reason.value} if reply.handoff_reason else {}
         log_event("reply", call_id=self.call_id, kind=reply.kind.value, lang=reply.lang, **reason)
+        for rejection in reply.rejections:
+            log_event("answer_rejected", call_id=self.call_id, reason=rejection.value)
         tts_first_audio_seconds = await self._speak(bot_text(reply))
-        timing = Timing(
+        stages = StageSeconds(
             asr_seconds=asr_seconds,
             retrieval_seconds=reply.stage_seconds.get("retrieval"),
             llm_seconds=reply.stage_seconds.get("llm"),
             tts_first_audio_seconds=tts_first_audio_seconds,
         )
-        for stage, seconds in timing.model_dump(exclude={"type"}, exclude_none=True).items():
+        for stage, seconds in stages.model_dump(exclude_none=True).items():
             log_event("stage", call_id=self.call_id, stage=stage, seconds=round(seconds, 4))
+        timing = Timing(
+            **stages.model_dump(),
+            kind=reply.kind,
+            handoff_reason=reply.handoff_reason,
+            rejections=list(reply.rejections),
+        )
         await self._outgoing.put(timing)
         if reply.handoff_reason is not None:
             await self._outgoing.put(Handoff(reason=reply.handoff_reason))

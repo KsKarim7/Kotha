@@ -25,8 +25,10 @@ from kotha.dialogue.answer import (
     GREETING,
     BotReply,
     HandoffReason,
+    Rejection,
     ReplyKind,
     Source,
+    handoff,
 )
 from kotha.dialogue.routing import Language
 from kotha.vad import WINDOW_SAMPLES
@@ -299,6 +301,39 @@ def test_each_answered_turn_reports_its_stage_timings() -> None:
     timing = first(events, "timing")
     assert timing["retrieval_seconds"] == 0.25 and timing["llm_seconds"] == 1.5
     assert timing["asr_seconds"] >= 0 and timing["tts_first_audio_seconds"] >= 0
+    assert (timing["kind"], timing["handoff_reason"], timing["rejections"]) == ("answer", None, [])
+
+
+def test_a_rejected_handoff_reports_its_reason_and_rules_without_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    rules = (Rejection.UNSUPPORTED_NUMBER, Rejection.TOO_LONG)
+
+    class RejectingPipeline(FakePipeline):
+        def reply(self, question: str) -> BotReply:
+            return handoff("bn", HandoffReason.REJECTED_TWICE, rules)
+
+    caplog.set_level(logging.INFO, logger="kotha")
+    with call(pipeline=RejectingPipeline()) as websocket:
+        started(websocket)
+        say(websocket)
+        timing = first(events_until(websocket, "timing"), "timing")
+    assert timing["kind"] == "handoff" and timing["handoff_reason"] == "rejected_twice"
+    assert timing["rejections"] == ["unsupported_number", "too_long"]
+    rejected = [
+        message for message in caplog.messages if message.startswith("event=answer_rejected")
+    ]
+    assert [message.rsplit("reason=", 1)[1] for message in rejected] == timing["rejections"]
+
+
+def test_a_failed_turn_limit_reports_its_reason_in_the_timing() -> None:
+    with call(asr=FakeAsr(transcript(ratio=5.0))) as websocket:
+        started(websocket)
+        say(websocket)
+        events_until(websocket, "timing")
+        say(websocket)
+        timing = first(events_until(websocket, "timing"), "timing")
+    assert (timing["kind"], timing["handoff_reason"]) == ("handoff", "failed_turns")
 
 
 def test_a_failed_turn_reports_asr_time_only() -> None:

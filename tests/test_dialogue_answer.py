@@ -171,7 +171,23 @@ def test_a_slow_first_answer_hands_off_instead_of_regenerating(
     pipeline, llm, _ = pipeline_for(["No citation here.", GOOD_EN])
     reply = pipeline.reply("what do I bring to replace my SIM")
     assert reply.handoff_reason == HandoffReason.NO_TIME_TO_RETRY
+    assert reply.rejections == (Rejection.MISSING_CITATION,)
     assert len(llm.calls) == 1
+
+
+def test_a_second_rejection_records_the_rules_the_second_answer_broke() -> None:
+    long_answer = " ".join(f"Bring your NID card [{SIM_EN}]." for _ in range(3))
+    pipeline, _, _ = pipeline_for(["No citation here.", long_answer])
+    reply = pipeline.reply("what do I bring to replace my SIM")
+    assert reply.handoff_reason == HandoffReason.REJECTED_TWICE
+    assert reply.rejections == (Rejection.TOO_LONG,)
+
+
+def test_an_answer_and_other_handoffs_carry_no_rejections() -> None:
+    pipeline, _, _ = pipeline_for([GOOD_EN])
+    assert pipeline.reply("what do I bring to replace my SIM").rejections == ()
+    pipeline, _, _ = pipeline_for([LLMTimeoutError("slow")])
+    assert pipeline.reply("what do I bring to replace my SIM").rejections == ()
 
 
 @pytest.mark.parametrize(
