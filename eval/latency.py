@@ -98,6 +98,10 @@ def counted(result: TurnResult) -> bool:
     return result.kind == "answer" and not result.split and not result.failure
 
 
+def heard(result: TurnResult) -> bool:
+    return not result.split and not result.failure and "ttfa" in result.stages
+
+
 def summarise(results: Sequence[TurnResult]) -> dict[str, tuple[int, float, float]]:
     measured = [result for result in results if counted(result)]
     summary = {}
@@ -105,6 +109,10 @@ def summarise(results: Sequence[TurnResult]) -> dict[str, tuple[int, float, floa
         values = [result.stages[stage] for result in measured if stage in result.stages]
         if values:
             summary[stage] = (len(values), *latency_percentiles(values))
+    # what a caller waits before hearing anything, whatever the reply kind
+    every_reply = [result.stages["ttfa"] for result in results if heard(result)]
+    if every_reply:
+        summary["ttfa_all_turns"] = (len(every_reply), *latency_percentiles(every_reply))
     return summary
 
 
@@ -345,6 +353,7 @@ def main() -> None:
             "counted": "answers only, not split, not failed",
             "asr_model": os.environ.get("KOTHA_ASR_MODEL", "unset"),
             "asr_device": os.environ.get("KOTHA_ASR_DEVICE", "cpu"),
+            "asr_compute_type": os.environ.get("KOTHA_ASR_COMPUTE_TYPE", "int8"),
             "input": "synthetic: rag_test questions spoken by the MMS voices",
             "frame_ms": str(round(1000 * FRAME_SECONDS)),
         }

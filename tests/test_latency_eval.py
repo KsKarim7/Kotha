@@ -86,13 +86,13 @@ def test_summary_gives_count_p50_and_p95_per_stage_without_split_turns() -> None
     ]
     results.append(TurnResult("split", "bn", "answer", split=True, stages={"ttfa": 99.0}))
     summary = summarise(results)
-    assert set(summary) == {"ttfa", "asr"}
+    assert set(summary) == {"ttfa", "asr", "ttfa_all_turns"}
+    assert summary["ttfa_all_turns"] == summary["ttfa"]
     count, p50, p95 = summary["ttfa"]
     assert count == 20
     assert p50 == pytest.approx(10.5)
     assert p95 == pytest.approx(19.05)
     assert summary["asr"] == (20, 1.0, 1.0)
-    assert set(summary) <= set(STAGES)
 
 
 def test_frame_clock_paces_one_frame_every_20_ms() -> None:
@@ -262,3 +262,15 @@ def test_only_answered_turns_are_counted() -> None:
     failed = TurnResult("f", "en", "answer", failure="timeout")
     assert [counted(result) for result in (answered, handoff, failed)] == [True, False, False]
     assert summarise([answered, handoff, failed])["ttfa"] == (1, 2.0, 2.0)
+
+
+def test_ttfa_over_all_turns_includes_handoffs_but_not_split_or_failed_turns() -> None:
+    results = [
+        TurnResult("a", "en", "answer", stages={"ttfa": 2.0}),
+        TurnResult("h", "en", "handoff", stages={"ttfa": 4.0}),
+        TurnResult("s", "en", "handoff", split=True, stages={"ttfa": 99.0}),
+        TurnResult("f", "en", "answer", failure="no_audio"),
+    ]
+    count, p50, _ = summarise(results)["ttfa_all_turns"]
+    assert (count, p50) == (2, 3.0)
+    assert summarise(results)["ttfa"][0] == 1

@@ -87,7 +87,11 @@ def load_live_services(resources: ExitStack) -> CallServices:
     asr_model = os.environ.get("KOTHA_ASR_MODEL")
     if not database_url or not asr_model:
         raise RuntimeError("DATABASE_URL and KOTHA_ASR_MODEL must be set (see docs/runbook.md)")
-    asr = WhisperAsr(asr_model, device=os.environ.get("KOTHA_ASR_DEVICE", "cpu"))
+    asr = WhisperAsr(
+        asr_model,
+        device=os.environ.get("KOTHA_ASR_DEVICE", "cpu"),
+        compute_type=os.environ.get("KOTHA_ASR_COMPUTE_TYPE", "int8"),
+    )
     pipeline = resources.enter_context(live_pipeline(database_url))
     tts = load_tts_service()
     warm_up(new_silero_probability, asr, pipeline, tts)
