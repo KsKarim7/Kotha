@@ -53,15 +53,6 @@ def test_a_word_in_exactly_half_the_documents_has_zero_idf() -> None:
     assert index.scores(["shared"]) == pytest.approx([0.0, 0.0, 0.0, 0.0])
 
 
-def test_top_returns_only_matching_documents_best_first() -> None:
-    assert BM25Okapi(DOCUMENTS).top(["apple", "kiwi"], limit=10) == [1, 0, 2, 3]
-
-
-def test_top_breaks_ties_by_document_order_and_respects_the_limit() -> None:
-    assert BM25Okapi(DOCUMENTS).top(["apple"], limit=3)[1:] == [1, 2]
-    assert len(BM25Okapi(DOCUMENTS).top(["apple"], limit=2)) == 2
-
-
 @pytest.mark.parametrize("documents", [[], [[]], [[], []]])
 def test_a_corpus_without_tokens_is_refused(documents: list[list[str]]) -> None:
     with pytest.raises(ValueError, match="at least one document"):

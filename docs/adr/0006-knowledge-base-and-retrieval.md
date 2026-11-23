@@ -109,6 +109,31 @@ with lexicon expansion. A column for ASR-transcribed versions of the questions i
 Khaled's recordings. Questions written by the KB's author inflate the scores, because they reuse
 the KB's wording; Khaled reviews them and adds his own.
 
+## Update 2026-11-23: exact package codes
+- **Defect.** A bare `NT-30GB` did not bring the internet packages document into the hybrid top 4,
+  although exact codes are BM25's job. `normalize` splits a code at its hyphen, so `NT-30GB`
+  becomes `nt` (in 20 of 126 chunks) and `30gb` (in 14). A whole-code token would not help:
+  `30gb` occurs only inside `NT-30GB`, so it already has the code's IDF. The cause is the ranking.
+  `NT-30GB` is the KB's example code, and the rollover and activation chunks repeat it two or
+  three times, while the packages table names it once in a long chunk, which BM25's length
+  normalisation penalises. Dense search ranks the same chunks first. Markup stripping and the
+  lexicon play no part; the lexicon only maps `জিবি` to `gb`.
+- **Decision.** BM25 also scores every table row on its own, with its chunk's title and heading,
+  and a chunk counts with its best unit, the whole chunk or one of its rows. A row that lists a code
+  is short, so it outranks long chunks that only mention the code. Every package code in the
+  catalogue is a regression test: the document that lists it must be in BM25's top 4 and in
+  hybrid search's top 4. The test does not use `rag_test` questions. The rows join the index
+  statistics, so every BM25 ranking changes a little; `EVALUATION.md` shows the old and new rows.
+- **Not done: Bangla stemming.** Exact tokens miss inflected forms (`প্যাকেজের` against
+  `প্যাকেজ`). A light suffix stripper is an experiment for later, and it needs a dev/test split of
+  `rag_test` first, so that the suffix list is chosen on the dev half and scored once on the
+  test half, not tuned on the questions that report it.
+- **The live retriever stays hybrid.** Dense alone scores higher on the typed questions, but they
+  were written by the KB's author in the KB's wording, which favours dense search. Callers' words
+  reach retrieval through ASR, where spelling errors, loanwords and codes are where exact tokens
+  are meant to help. The choice is made when the ASR-transcribed column exists (it needs the
+  recorded `asr_test` set); until then, hybrid keeps both paths. This record stays proposed.
+
 ## Alternatives considered
 - **Qdrant or Chroma:** another service or store to run, while PostgreSQL is already in the stack
   and pgvector covers exact and approximate search.

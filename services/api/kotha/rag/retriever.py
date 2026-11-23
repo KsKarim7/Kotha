@@ -48,10 +48,23 @@ def search_tokens(text: str) -> list[str]:
     return normalize(text.translate(MARKDOWN_MARKUP)).split()
 
 
+def table_rows(text: str) -> list[str]:
+    return [line for line in text.splitlines() if line.lstrip().startswith("|")]
+
+
+def scoring_units(chunk: Chunk) -> list[list[str]]:
+    rows = (f"{chunk.title}\n{chunk.heading}\n{row}" for row in table_rows(chunk.text))
+    row_tokens = [tokens for tokens in map(search_tokens, rows) if tokens]
+    return [search_tokens(embedding_text(chunk)), *row_tokens]
+
+
 class SparseRetriever:
+    # a table row is also scored alone, so a code listed once in a long table outranks chunks
+    # that only mention it
     def __init__(self, chunks: Sequence[Chunk], lexicon: Mapping[str, str]) -> None:
-        self._chunk_ids = [chunk.id for chunk in chunks]
-        self._bm25 = BM25Okapi([search_tokens(embedding_text(chunk)) for chunk in chunks])
+        units = [(chunk.id, tokens) for chunk in chunks for tokens in scoring_units(chunk)]
+        self._unit_chunk_ids = [chunk_id for chunk_id, _ in units]
+        self._bm25 = BM25Okapi([tokens for _, tokens in units])
         self._spellings = spelling_groups(lexicon)
 
     def ranked_ids(
@@ -60,7 +73,11 @@ class SparseRetriever:
         tokens = search_tokens(query)
         if use_lexicon:
             tokens = expand_tokens(tokens, self._spellings)
-        return [self._chunk_ids[index] for index in self._bm25.top(tokens, limit)]
+        best: dict[str, float] = {}
+        for chunk_id, score in zip(self._unit_chunk_ids, self._bm25.scores(tokens), strict=True):
+            if score > 0:
+                best[chunk_id] = max(best.get(chunk_id, 0.0), score)
+        return sorted(best, key=lambda chunk_id: (-best[chunk_id], chunk_id))[:limit]
 
 
 class HybridRetriever:
