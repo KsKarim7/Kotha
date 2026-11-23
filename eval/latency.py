@@ -163,6 +163,7 @@ async def speak_and_listen(
     silence_task = asyncio.create_task(send_paced(websocket, repeat(silence), clock))
     vad_end = first_audio = None
     timing: dict[str, float | None] = {}
+    handoff_event_reason = ""
     try:
         while not timing:
             message = await websocket.recv()
@@ -175,6 +176,8 @@ async def speak_and_listen(
                 vad_end = vad_end or now
             elif event["type"] == "bot_text":
                 result.kind = event["kind"]
+            elif event["type"] == "handoff":
+                handoff_event_reason = event["reason"]
             elif event["type"] == "timing":
                 timing = event
                 result.handoff_reason = event.get("handoff_reason") or ""
@@ -184,6 +187,10 @@ async def speak_and_listen(
         await asyncio.gather(silence_task, return_exceptions=True)
     await websocket.send(json.dumps({"type": "stop"}))
     result.split = vad_end is None or vad_end < speech_end
+    # the app sends a handoff before the turn's timing, so a handoff turn must have both
+    if handoff_event_reason != result.handoff_reason:
+        result.failure = "handoff_mismatch"
+        return
     if vad_end is None or first_audio is None:
         result.failure = "no_audio"
         return

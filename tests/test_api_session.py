@@ -281,14 +281,14 @@ def test_an_asr_error_is_answered_and_two_failed_turns_hand_off() -> None:
     with call(asr=asr) as websocket:
         started(websocket)
         say(websocket)
-        first_turn = events_until(websocket, "reply_audio_end")
+        first_turn = events_until(websocket, "timing")
         say(websocket)
-        second_turn = events_until(websocket, "handoff")
+        second_turn = events_until(websocket, "timing")
     assert first(first_turn, "bot_text")["kind"] == "repeat"
     assert first(second_turn, "bot_text")["kind"] == "handoff"
     assert first(second_turn, "bot_text")["text"] == FIXED_REPLIES[ReplyKind.HANDOFF]["bn"]
     assert first(second_turn, "handoff") == {"type": "handoff", "reason": "failed_turns"}
-    assert types(second_turn)[-3:] == ["reply_audio_end", "timing", "handoff"]
+    assert types(second_turn)[-3:] == ["reply_audio_end", "handoff", "timing"]
 
 
 def test_each_answered_turn_reports_its_stage_timings() -> None:

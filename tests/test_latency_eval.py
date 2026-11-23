@@ -126,6 +126,7 @@ def scripted_server(
     close_in_greeting: bool = False,
     timing: dict[str, object] = TIMING,
     kind: str = "answer",
+    send_handoff: bool = True,
 ) -> Callable[[ServerConnection], Awaitable[None]]:
     async def handle(websocket: ServerConnection) -> None:
         assert json.loads(await websocket.recv())["type"] == "start"
@@ -145,6 +146,9 @@ def scripted_server(
                     await websocket.send(json.dumps({"type": "bot_text", "kind": kind}))
                     await websocket.send(b"\x01\x00" * 160)
                 await websocket.send(json.dumps({"type": "reply_audio_end"}))
+                if timing.get("handoff_reason") and send_handoff:
+                    handoff = {"type": "handoff", "reason": timing["handoff_reason"]}
+                    await websocket.send(json.dumps(handoff))
                 await websocket.send(json.dumps(timing))
 
     return handle
@@ -168,6 +172,14 @@ def test_a_turn_skips_the_greeting_audio_and_measures_every_stage() -> None:
     assert result.stages["ttfa"] == pytest.approx(
         result.stages["vad"] + result.stages["ttfa_from_vad"]
     )
+
+
+def test_a_handoff_turn_without_its_handoff_event_is_a_failure() -> None:
+    handoff_timing = {**TIMING, "kind": "handoff", "handoff_reason": "no_answer"}
+    server = scripted_server(
+        speech_end_after=CLIP_FRAMES + 3, timing=handoff_timing, kind="handoff", send_handoff=False
+    )
+    assert measured(server).failure == "handoff_mismatch"
 
 
 def test_a_handoff_turn_records_its_reason_and_rules_in_the_csv(tmp_path: Path) -> None:
