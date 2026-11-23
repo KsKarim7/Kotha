@@ -75,3 +75,15 @@ signals `max_compression_ratio` and `max_segment_tokens`; the wrapper does not j
 
 To be confirmed or revised on the dev split in M3-6 (WER per model, the live model and compute
 type), and then marked accepted.
+
+## Input for M3-6: latency in the call loop (2026-11-24)
+Measured with `eval/latency.py` on commit `46d3bed` (EVALUATION.md, "Latency"), synthetic MMS
+speech, one call at a time; the `asr` stage, p50 / p95 in seconds over answered turns:
+- tugstugi (A), CPU `int8`: 5.223 / 9.045 (MLflow `fba66a2f`).
+- tugstugi (A), cuda `int8_float16`: 1.621 / 1.891 (`64d884be`).
+- arif11 (B), cuda `int8_float16`: 1.111 / 1.332 (`0b9f98d2`; that run's LLM rows are not usable,
+  because the Gemini quota ran out, but its ASR times are).
+
+On the GPU both fine-tunes keep ASR under 2 s at p95, and B is about 0.5 s faster at p50. This
+says nothing about accuracy: the live model is chosen on the WER of the recorded `asr_test` set,
+which M3-6 still needs, and latency only breaks a tie or rules out a model that is too slow.
