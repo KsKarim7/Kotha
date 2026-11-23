@@ -86,7 +86,7 @@ class Timing(StageSeconds):
     type: Literal["timing"] = "timing"
     kind: ReplyKind
     handoff_reason: HandoffReason | None = None
-    rejections: list[Rejection] = []
+    rejections: list[Rejection] = Field(default_factory=list)
 
 
 class ErrorEvent(BaseModel):

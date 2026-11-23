@@ -72,4 +72,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Calls handed off when Gemini's free tier was overloaded: `GeminiClient` now makes up to three attempts within its 12 s deadline (at most 4 s for each but the last) and rests `gemini-3.1-flash-lite` for 60 s after a transient failure (ADR 0007 update).
 - A handoff now says why: an LLM failure is `llm_timeout`, `llm_unavailable`, `llm_rate_limited` or `llm_error` instead of `llm_failed`, the `reply` log event carries the reason, and the page shows it in words.
-- The `timing` event carries the reply kind, the handoff reason and the verifier rules a rejected answer broke (also logged as `answer_rejected` events, names only), and `eval/latency.py` writes them as per-turn `handoff_reason` and `rejections` columns and logs reason counts to MLflow.
+- The `timing` event carries the reply kind, the handoff reason and the verifier rules every rejected answer of the turn broke (also logged as `answer_rejected` events, names only), and `eval/latency.py` writes them as per-turn `handoff_reason` and `rejections` columns and logs reason counts to MLflow.
