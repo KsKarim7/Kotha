@@ -218,6 +218,7 @@ def test_stars_and_hashes_are_spoken_only_inside_a_code_with_digits(
         ("১৮:০০টায় বন্ধ", "bn", "সন্ধ্যা ছয়টায় বন্ধ"),
         ("১৮:৩০টার পরে", "bn", "সন্ধ্যা ছয়টা ত্রিশ মিনিটের পরে"),
         ("১০:০০টা থেকে", "bn", "সকাল দশটা থেকে"),
+        ("১০:০০ টাকা", "bn", "সকাল দশটা টাকা"),
         ("Score 25:70.", "en", "score twenty five seventy"),
     ],
 )
