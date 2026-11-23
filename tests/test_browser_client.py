@@ -71,7 +71,7 @@ def test_the_client_follows_the_call_protocol() -> None:
 def test_the_page_explains_every_handoff_reason() -> None:
     script = (STATIC_DIR / "call.js").read_text(encoding="utf-8")
     for reason in HandoffReason:
-        assert re.search(rf'^  {reason.value}: "[^"]+",$', script, re.MULTILINE), reason
+        assert re.search(rf'^\s*{reason.value}:\s*"[^"]+",?$', script, re.MULTILINE), reason
     assert "HANDOFF_REASONS[event.reason]" in script
 
 

@@ -9,7 +9,7 @@ const HANDOFF_REASONS = {
   no_time_to_retry: "the answer failed the citation checks and there was no time to retry",
   llm_timeout: "the language model did not answer in time",
   llm_unavailable: "the language model is overloaded or unreachable",
-  llm_rate_limited: "the language model's quota is used up",
+  llm_rate_limited: "the language model's rate limit or quota was reached",
   llm_error: "the language model refused the request or gave no complete answer",
   retrieval_failed: "the knowledge base search failed",
   failed_turns: "two turns in a row could not be understood",
