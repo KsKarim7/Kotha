@@ -80,8 +80,10 @@ def test_fixed_prompts_are_the_greeting_and_the_fixed_replies() -> None:
 def test_warmed_prompts_are_served_from_the_cache_without_synthesis() -> None:
     bangla, english = FakeVoice(), FakeVoice()
     service = TtsService({"bn": bangla, "en": english})
-    service.warm_fixed_prompts()
+    service.warm_fixed_prompts("bn")
+    service.warm_fixed_prompts("en")
     synthesised = len(bangla.texts) + len(english.texts)
+    assert len(bangla.texts) > 0 and len(english.texts) > 0
     handoff = FIXED_REPLIES[ReplyKind.HANDOFF]["bn"]
     first = service.synthesize(handoff, "bn")
     spoken = asyncio.run(spoken_audio(service, handoff, "bn"))

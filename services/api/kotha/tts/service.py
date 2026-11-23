@@ -8,6 +8,7 @@ from kotha.audio.convert import SAMPLE_RATE_HZ, resample
 from kotha.audio.telephony import TELEPHONY_SAMPLE_RATE_HZ
 from kotha.dialogue.answer import FIXED_REPLIES, GREETING, ReplyKind
 from kotha.dialogue.routing import Language
+from kotha.logs import logged_duration
 from kotha.tts.mms import VOICES, MmsVoice
 from kotha.tts.speakable import speakable_sentences
 
@@ -35,11 +36,10 @@ class TtsService:
         self._voices = voices
         self._cache: dict[tuple[Language, str], SentenceAudio] = {}
 
-    def warm_fixed_prompts(self) -> None:
-        for lang in self._voices:
-            for prompt in fixed_prompts(lang):
-                audio = self.synthesize(prompt, lang)
-                self._cache[(lang, prompt)] = tuple(read_only(sentence) for sentence in audio)
+    def warm_fixed_prompts(self, lang: Language) -> None:
+        for prompt in fixed_prompts(lang):
+            audio = self.synthesize(prompt, lang)
+            self._cache[(lang, prompt)] = tuple(read_only(sentence) for sentence in audio)
 
     def synthesize(self, text: str, lang: Language) -> SentenceAudio:
         cached = self._cache.get((lang, text))
@@ -65,8 +65,14 @@ class TtsService:
 
 
 def load_tts_service() -> TtsService:
-    service = TtsService({lang: MmsVoice(lang) for lang in VOICES})
-    service.warm_fixed_prompts()
+    voices: dict[Language, Voice] = {}
+    for lang in VOICES:
+        with logged_duration(f"tts_load_{lang}"):
+            voices[lang] = MmsVoice(lang)
+    service = TtsService(voices)
+    for lang in voices:
+        with logged_duration(f"tts_prompts_{lang}"):
+            service.warm_fixed_prompts(lang)
     return service
 
 

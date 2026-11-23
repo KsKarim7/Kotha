@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Callable
 from contextlib import ExitStack
 
@@ -45,7 +46,10 @@ class ToneVoice:
         return np.full(800, 0.3, dtype=np.float32)
 
 
-def test_warm_up_runs_vad_then_asr_on_synthetic_speech_then_one_search() -> None:
+def test_warm_up_runs_vad_then_asr_on_synthetic_speech_then_one_search(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger="kotha")
     steps: list[str] = []
     voice = ToneVoice(steps)
     asr = RecordingAsr(steps)
@@ -60,6 +64,8 @@ def test_warm_up_runs_vad_then_asr_on_synthetic_speech_then_one_search() -> None
 
     warm_up(new_vad, asr, RecordingPipeline(steps), TtsService({"bn": voice}))
     assert steps == ["load vad", f"vad {WINDOW_SAMPLES}", "tts", "asr", "search"]
+    logged = [message.rsplit("stage=", 1)[1] for message in caplog.messages]
+    assert logged == ["vad_warm_up", "asr_warm_up_speech", "asr_warm_up", "retrieval_warm_up"]
     assert voice.texts == ["প্যাকের মেয়াদ ত্রিশ দিন"]
     assert asr.audio_lengths == [800]
 

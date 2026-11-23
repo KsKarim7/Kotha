@@ -74,3 +74,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A handoff now says why: an LLM failure is `llm_timeout`, `llm_unavailable`, `llm_rate_limited` or `llm_error` instead of `llm_failed`, the `reply` log event carries the reason, and the page shows it in words.
 - The `timing` event carries the reply kind, the handoff reason and the verifier rules every rejected answer of the turn broke (also logged as `answer_rejected` events, names only), and `eval/latency.py` writes them as per-turn `handoff_reason` and `rejections` columns and logs reason counts to MLflow.
 - A bare package code such as `NT-30GB` now finds the document that lists it: BM25 also scores each table row on its own, and a chunk counts with its best unit (ADR 0006 update). `BM25Okapi.top` is removed, since nothing uses it.
+- `KOTHA_ASR_COMPUTE_TYPE` sets the ASR compute type (default `int8`), and `eval/latency.py` reports TTFA over all heard turns (`ttfa_all_turns`) next to the answers-only rows.
+- The app logs the duration of each startup step (`startup_step` events, numbers only), and `eval/cold_start.py` times one cold start and its breakdown into MLflow.
