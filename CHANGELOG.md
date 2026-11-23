@@ -71,3 +71,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - Calls handed off when Gemini's free tier was overloaded: `GeminiClient` now makes up to three attempts within its 12 s deadline (at most 4 s for each but the last) and rests `gemini-3.1-flash-lite` for 60 s after a transient failure (ADR 0007 update).
+- A handoff now says why: an LLM failure is `llm_timeout`, `llm_unavailable`, `llm_rate_limited` or `llm_error` instead of `llm_failed`, the `reply` log event carries the reason, and the page shows it in words.

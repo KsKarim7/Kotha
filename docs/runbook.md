@@ -348,8 +348,18 @@ cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
   before that the connection is refused. Clients (the browser page, `eval/latency.py`) poll it
   before they open a call. `startup_seconds` covers loading and warm-up inside the app; the time
   from process start to ready also includes Python imports and is measured from outside.
-- Logs carry only event names, call ids, reply kinds, languages and error codes; never what the
-  caller or the bot said.
+- Logs carry only event names, call ids, reply kinds, languages, handoff reasons and error codes;
+  never what the caller or the bot said.
+- After a handoff the page says why, and the log has it: `docker compose logs app | grep reason=`
+  (or the uvicorn output). The LLM reasons point outside the code:
+  - `llm_unavailable` (the page says "overloaded or unreachable"): Gemini answered 503 or could
+    not be reached on all attempts. On the free tier this is Google's capacity. Wait a minute and
+    ask again; if it persists, check the network and Google's status page, or move to a paid tier.
+  - `llm_rate_limited`: the key's quota is used up (429). See the limits in Google AI Studio;
+    daily quotas reset at midnight Pacific time.
+  - `llm_timeout`: no attempt answered within the 12 s deadline; usually overload as well.
+  - `llm_error`: the request was refused (4xx, for example a revoked key) or the answer was cut
+    off. Check `GEMINI_API_KEY` in `.env` and that the app started without errors.
 
 ## Docker stack
 
@@ -394,7 +404,7 @@ printed so any cold effect is visible. The percentiles count only turns that got
 `answer`), were not split and did not fail. A fixed reply (handoff, "please repeat", account) is
 served from the TTS cache, so its `tts_first_audio` is near zero, and some of those turns never
 reach the LLM; mixing them in would hide the answer path. The cost: a slow LLM path that ends in a
-handoff (`no_answer`, `rejected_twice`, `llm_failed`) is left out too, which biases `llm` and
+handoff (`no_answer`, `rejected_twice`, an `llm_*` reason) is left out too, which biases `llm` and
 `ttfa` low. The script prints the counted turns, the split turns, the reply kinds and the failures
 (timeout, connection closed, connect failed, bad event, no audio), warns when fewer than 30 turns
 are counted (the blueprint's minimum), and writes one row per turn to `--output`, which must be

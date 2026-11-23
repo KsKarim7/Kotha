@@ -348,17 +348,32 @@ def test_a_tts_error_sends_an_error_and_still_ends_the_reply_audio() -> None:
     assert first(next_turn, "bot_text")["kind"] == "answer"
 
 
-def test_the_pipeline_handoff_reason_reaches_the_client() -> None:
+def test_the_pipeline_handoff_reason_reaches_the_client_and_the_log(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     class HandoffPipeline(FakePipeline):
         def reply(self, question: str) -> BotReply:
-            return BotReply(ReplyKind.HANDOFF, "bn", "এজেন্ট", (), HandoffReason.NO_ANSWER)
+            return BotReply(ReplyKind.HANDOFF, "bn", "এজেন্ট", (), HandoffReason.LLM_UNAVAILABLE)
 
+    caplog.set_level(logging.INFO, logger="kotha")
     with call(pipeline=HandoffPipeline()) as websocket:
         started(websocket)
         say(websocket)
         events = events_until(websocket, "handoff")
     assert first(events, "bot_text")["kind"] == "handoff"
-    assert first(events, "handoff") == {"type": "handoff", "reason": "no_answer"}
+    assert first(events, "handoff") == {"type": "handoff", "reason": "llm_unavailable"}
+    [reply_log] = [message for message in caplog.messages if message.startswith("event=reply")]
+    assert "kind=handoff" in reply_log and "reason=llm_unavailable" in reply_log
+
+
+def test_an_answer_is_logged_without_a_reason(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.INFO, logger="kotha")
+    with call() as websocket:
+        started(websocket)
+        say(websocket)
+        events_until(websocket, "reply_audio_end")
+    [reply_log] = [message for message in caplog.messages if message.startswith("event=reply")]
+    assert "kind=answer" in reply_log and "reason=" not in reply_log
 
 
 def test_turns_that_arrive_while_the_bot_is_busy_keep_only_the_latest_waiting(

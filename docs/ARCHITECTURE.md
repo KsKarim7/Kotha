@@ -239,7 +239,7 @@ connection is one call. Messages are Pydantic models in `kotha.api.protocol`.
 | `transcript` | a turn passed ASR and the gate | `text`, `final` (always true in MS1) |
 | `bot_text` | before the bot speaks | `kind` (`greeting`, `answer`, `account_unavailable`, `handoff`, `repeat`), `lang`, `text`, `citations` (`doc_id`, `title`, one per document) |
 | `reply_audio_end` | after the last audio frame of a reply (an addition) | none |
-| `handoff` | after a handoff reply has been spoken | `reason`; the blueprint's summary comes with M6-full |
+| `handoff` | after a handoff reply has been spoken | `reason` (`no_answer`, `rejected_twice`, `no_time_to_retry`, `llm_timeout`, `llm_unavailable`, `llm_rate_limited`, `llm_error`, `retrieval_failed`, `failed_turns`), also logged on the `reply` event and shown on the page; the blueprint's summary comes with M6-full |
 | `error` | a message was refused or TTS failed | `code` |
 | `playback_stop` | not sent in MS1; it belongs to barge-in (MS2) | |
 

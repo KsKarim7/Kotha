@@ -15,7 +15,13 @@ from kotha.dialogue.routing import (
     normalized_pattern,
 )
 from kotha.kb.chunks import Chunk
-from kotha.llm.client import LLMClient, LLMError
+from kotha.llm.client import (
+    LLMClient,
+    LLMError,
+    LLMRateLimitError,
+    LLMTimeoutError,
+    LLMUnavailableError,
+)
 from kotha.rag.citations import (
     CITATION_PATTERN,
     cited_chunk_ids,
@@ -120,7 +126,10 @@ class ReplyKind(StrEnum):
 class HandoffReason(StrEnum):
     NO_ANSWER = "no_answer"
     REJECTED_TWICE = "rejected_twice"
-    LLM_FAILED = "llm_failed"
+    LLM_TIMEOUT = "llm_timeout"
+    LLM_UNAVAILABLE = "llm_unavailable"
+    LLM_RATE_LIMITED = "llm_rate_limited"
+    LLM_ERROR = "llm_error"
     RETRIEVAL_FAILED = "retrieval_failed"
     NO_TIME_TO_RETRY = "no_time_to_retry"
     FAILED_TURNS = "failed_turns"
@@ -195,6 +204,16 @@ def fixed_reply(kind: ReplyKind, lang: Language) -> BotReply:
 
 def handoff(lang: Language, reason: HandoffReason) -> BotReply:
     return BotReply(ReplyKind.HANDOFF, lang, FIXED_REPLIES[ReplyKind.HANDOFF][lang], (), reason)
+
+
+def llm_failure_reason(error: LLMError) -> HandoffReason:
+    if isinstance(error, LLMTimeoutError):
+        return HandoffReason.LLM_TIMEOUT
+    if isinstance(error, LLMRateLimitError):
+        return HandoffReason.LLM_RATE_LIMITED
+    if isinstance(error, LLMUnavailableError):
+        return HandoffReason.LLM_UNAVAILABLE
+    return HandoffReason.LLM_ERROR
 
 
 def passage(chunk: Chunk) -> str:
@@ -299,8 +318,8 @@ class AnswerPipeline:
             prompt = user_prompt(question, lang, list(chunks.values()), rejections)
             try:
                 answer = self._generate(prompt, stage_seconds)
-            except LLMError:
-                return handoff(lang, HandoffReason.LLM_FAILED)
+            except LLMError as error:
+                return handoff(lang, llm_failure_reason(error))
             if NO_ANSWER in answer:
                 return handoff(lang, HandoffReason.NO_ANSWER)
             rejections = rejections_for(answer, passages, lang)

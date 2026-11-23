@@ -20,7 +20,13 @@ from kotha.dialogue.routing import caller_language
 from kotha.kb.chunks import chunk_documents
 from kotha.kb.documents import read_documents
 from kotha.kb.ingest import KB_FOLDER
-from kotha.llm.client import LLMEmptyResponseError, LLMTimeoutError
+from kotha.llm.client import (
+    LLMEmptyResponseError,
+    LLMRateLimitError,
+    LLMRequestError,
+    LLMTimeoutError,
+    LLMUnavailableError,
+)
 from kotha.llm.fake import FakeLLMClient
 from kotha.rag.citations import split_sentences
 from kotha.rag.retriever import RetrievedChunk
@@ -309,17 +315,22 @@ def test_the_no_answer_reply_hands_off_without_a_second_call(no_answer: str) -> 
 
 
 @pytest.mark.parametrize(
-    "replies",
+    ("replies", "reason"),
     [
-        [LLMTimeoutError("slow")],
-        [LLMEmptyResponseError("blocked")],
-        ["No citation here.", LLMTimeoutError("slow")],
+        ([LLMTimeoutError("slow")], HandoffReason.LLM_TIMEOUT),
+        ([LLMUnavailableError("overloaded")], HandoffReason.LLM_UNAVAILABLE),
+        ([LLMRateLimitError("quota")], HandoffReason.LLM_RATE_LIMITED),
+        ([LLMRequestError("rejected")], HandoffReason.LLM_ERROR),
+        ([LLMEmptyResponseError("blocked")], HandoffReason.LLM_ERROR),
+        (["No citation here.", LLMUnavailableError("overloaded")], HandoffReason.LLM_UNAVAILABLE),
     ],
 )
-def test_an_llm_failure_hands_off_at_once(replies: list[str | Exception]) -> None:
+def test_an_llm_failure_hands_off_at_once_with_its_own_reason(
+    replies: list[str | Exception], reason: HandoffReason
+) -> None:
     pipeline, llm, _ = pipeline_for(replies)
     reply = pipeline.reply("what do I bring to replace my SIM")
-    assert (reply.kind, reply.handoff_reason) == (ReplyKind.HANDOFF, HandoffReason.LLM_FAILED)
+    assert (reply.kind, reply.handoff_reason) == (ReplyKind.HANDOFF, reason)
     assert len(llm.calls) == len(replies)
 
 
