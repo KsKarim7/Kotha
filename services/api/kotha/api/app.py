@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from kotha.api.protocol import Readiness
 from kotha.api.session import CallServices, CallSession, Transcriber
 from kotha.dialogue.routing import Language
-from kotha.logs import configure_logging, log_event
+from kotha.logs import configure_logging, log_event, logged_duration
 from kotha.tts.service import SentenceAudio
 from kotha.vad import WINDOW_SAMPLES
 
@@ -66,9 +66,14 @@ def warm_up(
     pipeline: WarmablePipeline,
     tts: SentenceSynthesizer,
 ) -> None:
-    new_vad()(np.zeros(WINDOW_SAMPLES, dtype=np.float32))
-    asr.transcribe(np.concatenate(tts.synthesize(WARM_UP_SENTENCE, "bn")))
-    pipeline.warm_up()
+    with logged_duration("vad_warm_up"):
+        new_vad()(np.zeros(WINDOW_SAMPLES, dtype=np.float32))
+    with logged_duration("asr_warm_up_speech"):
+        speech = np.concatenate(tts.synthesize(WARM_UP_SENTENCE, "bn"))
+    with logged_duration("asr_warm_up"):
+        asr.transcribe(speech)
+    with logged_duration("retrieval_warm_up"):
+        pipeline.warm_up()
 
 
 def new_silero_probability() -> Callable[[np.ndarray], float]:
@@ -85,16 +90,18 @@ def asr_options() -> dict[str, str]:
 
 
 def load_live_services(resources: ExitStack) -> CallServices:
-    from kotha.asr.whisper import WhisperAsr
-    from kotha.dialogue.chat import live_pipeline
-    from kotha.tts.service import load_tts_service
-
     configure_logging()
+    with logged_duration("imports"):
+        from kotha.asr.whisper import WhisperAsr
+        from kotha.dialogue.chat import live_pipeline
+        from kotha.tts.service import load_tts_service
+
     database_url = os.environ.get("DATABASE_URL")
     asr_model = os.environ.get("KOTHA_ASR_MODEL")
     if not database_url or not asr_model:
         raise RuntimeError("DATABASE_URL and KOTHA_ASR_MODEL must be set (see docs/runbook.md)")
-    asr = WhisperAsr(asr_model, **asr_options())
+    with logged_duration("asr_load"):
+        asr = WhisperAsr(asr_model, **asr_options())
     pipeline = resources.enter_context(live_pipeline(database_url))
     tts = load_tts_service()
     warm_up(new_silero_probability, asr, pipeline, tts)

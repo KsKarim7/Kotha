@@ -1,5 +1,8 @@
 import logging
 import re
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 LOGGER = logging.getLogger("kotha")
 ALLOWED_FIELDS = frozenset(
@@ -30,3 +33,10 @@ def log_event(event: str, **fields: LogValue) -> None:
             raise ValueError(f"log field {name!r} must be a short token")
     parts = [f"event={event}", *(f"{name}={value}" for name, value in sorted(fields.items()))]
     LOGGER.info(" ".join(parts))
+
+
+@contextmanager
+def logged_duration(step: str) -> Iterator[None]:
+    started = time.perf_counter()
+    yield
+    log_event("startup_step", stage=step, seconds=round(time.perf_counter() - started, 3))

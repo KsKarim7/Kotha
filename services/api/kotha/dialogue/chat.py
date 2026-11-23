@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from kotha.db.schema import connect
 from kotha.dialogue.answer import AnswerPipeline, BotReply
 from kotha.llm.gemini import GeminiClient
+from kotha.logs import logged_duration
 from kotha.rag.embedder import Embedder
 from kotha.rag.retriever import HybridRetriever
 from kotha.text.lexicon import LEXICON_PATH, read_lexicon
@@ -13,10 +14,14 @@ from kotha.text.lexicon import LEXICON_PATH, read_lexicon
 
 @contextmanager
 def live_pipeline(database_url: str) -> Iterator[AnswerPipeline]:
-    llm = GeminiClient()
+    with logged_duration("llm_client"):
+        llm = GeminiClient()
     try:
         with connect(database_url) as connection:
-            retriever = HybridRetriever(connection, Embedder(), read_lexicon(LEXICON_PATH))
+            with logged_duration("embedder_load"):
+                embedder = Embedder()
+            with logged_duration("retriever_index"):
+                retriever = HybridRetriever(connection, embedder, read_lexicon(LEXICON_PATH))
             yield AnswerPipeline(retriever, llm)
     finally:
         llm.close()
