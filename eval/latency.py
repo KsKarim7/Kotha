@@ -109,7 +109,6 @@ def summarise(results: Sequence[TurnResult]) -> dict[str, tuple[int, float, floa
         values = [result.stages[stage] for result in measured if stage in result.stages]
         if values:
             summary[stage] = (len(values), *latency_percentiles(values))
-    # what a caller waits before hearing anything, whatever the reply kind
     every_reply = [result.stages["ttfa"] for result in results if heard(result)]
     if every_reply:
         summary["ttfa_all_turns"] = (len(every_reply), *latency_percentiles(every_reply))
