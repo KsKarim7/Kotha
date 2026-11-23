@@ -35,10 +35,10 @@ checked on the date above; numbered sources are under References.
 - `kotha.llm.client` defines the `LLMClient` protocol, `generate(system_prompt, user_prompt)`, and
   typed errors. Callers depend only on these. `kotha.llm.fake.FakeLLMClient` serves tests.
 - `kotha.llm.gemini.GeminiClient` uses `google-genai`. The key comes only from `GEMINI_API_KEY`.
-- The first attempt uses `gemini-3.1-flash-lite`. Up to two retries, on a timeout, rate limit, 5xx
-  or connection failure, use `gemini-3.5-flash-lite`, so a retry does not depend on the same
-  overloaded model. Rejected requests and empty or incomplete answers are not retried.
-- Every call starts on `gemini-3.1-flash-lite`, even right after it failed (see the second update).
+- Every call's first attempt uses `gemini-3.1-flash-lite`, even right after it failed (see the
+  second update). Up to two retries, on a timeout, rate limit, 5xx or connection failure, use
+  `gemini-3.5-flash-lite`, so a retry does not depend on the same overloaded model. Rejected
+  requests and empty or incomplete answers are not retried.
 - `generate` has a hard deadline of 12 s in total. Every attempt but the last gets at most 4 s, a
   retry runs only if at least 2 s are left, and the last attempt gets whatever remains. Each attempt
   runs on a pool of 16 workers and is abandoned at its budget. The 2 s rule is a guard for other
@@ -69,13 +69,15 @@ outside this code: when both models are overloaded, the call still hands off.
 ## Update 2026-11-24: no rest for the primary
 The first update also let `gemini-3.1-flash-lite` rest for 60 s after a transient failure, to save
 the second or so a 503 costs. The next committed latency run (MLflow `d4a53096`, CPU) handed off
-28 of 72 turns, 24 of them `no_answer`, where the MS1 run handed off 14. While the primary rested,
-nearly every answer came from `gemini-3.5-flash-lite`. A diagnostic probe sent the app's own
-prompts for some of those turns to both models (not a measurement): the primary's answers passed
-the verifier every time, while `gemini-3.5-flash-lite` often replied `NO_ANSWER` although the gold
-passage was among the four, and retrieval gave the same passages before and after #68. So the
-rest is removed: every call starts on the primary again. The cost is the time of a fast 503 on
-each turn while the primary is overloaded.
+28 of 72 turns, 24 of them `no_answer`, where the MS1 run handed off 14. The model that answered
+is not logged per turn, but given the rest and the primary's 503 rate that day, most answers
+most likely came from `gemini-3.5-flash-lite`. A diagnostic probe sent the app's own prompts for
+some of those turns to both models (not a measurement): the primary's answers passed the verifier
+every time, while `gemini-3.5-flash-lite` often replied `NO_ANSWER` although the gold passage was
+among the four; retrieval put the gold passage among the four both before and after #68. So the
+rest is removed: every call starts on the primary again. The cost while the primary is
+overloaded: a fast 503 on each turn, or, when it stalls, up to 4 s, after which two stalled
+retries leave the last attempt only about 4 s.
 
 ## Alternatives considered
 - **`google-generativeai`:** deprecated [1].
