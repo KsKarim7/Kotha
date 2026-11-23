@@ -96,7 +96,7 @@ Interpretation: [to be written by Khaled]
 
 Warm calls, one call at a time, in seconds, p50 / p95. Each column is one configuration and one run. Stage rows count answered turns only (not split, not failed); `ttfa_all_turns` counts every heard turn, handoffs included: the time until the caller hears anything.
 
-| Stage | MS1: CPU, tugstugi `int8` | CPU, tugstugi `int8`, primary rest | CPU, tugstugi `int8` | cuda, tugstugi `int8_float16` | cuda, arif11 `int8_float16` (quota ran out) |
+| Stage | MS1: CPU, tugstugi `int8` (from the code; that run did not log the compute type) | CPU, tugstugi `int8`, primary rest | CPU, tugstugi `int8` | cuda, tugstugi `int8_float16` | cuda, arif11 `int8_float16` (quota ran out) |
 | --- | --- | --- | --- | --- | --- |
 | vad (true end of speech to `speech_end`, 700 ms hangover included) | 0.746 / 0.770 | 0.747 / 0.767 | 0.747 / 0.762 | 0.749 / 0.767 | 0.750 / 0.766 |
 | asr | 5.261 / 9.357 | 6.508 / 8.764 | 5.223 / 9.045 | 1.621 / 1.891 | 1.111 / 1.332 |
@@ -125,9 +125,9 @@ Handoff reasons (from the per-turn CSV; the MS1 run did not record them):
 
 Why the columns differ, as facts of the runs:
 - **Primary rest.** Commit `27a682a` let `gemini-3.1-flash-lite` rest for 60 s after a failure (#64). That run's handoffs rose to 28 (24 `no_answer`, against 14 handoffs in MS1), and the rest was removed in #76 (ADR 0007, second update). The other new columns run on `46d3bed`, without the rest.
-- **Gemini on that day.** In diagnostic probes (not measurements) `gemini-3.1-flash-lite` returned 503 to most requests, so most turns were answered by the retry model; the model that answered is not logged per turn. The two models answer differently (ADR 0007), so `llm` and the handoff counts depend on Google's load, not only on the code.
-- **arif11 column.** The key's daily Gemini quota ran out during this run (17 `llm_rate_limited`, from `mx04` on, in the last third of the run); it has 27 counted turns, below the blueprint's 30, so only its `vad` and `asr` rows compare with the other columns.
-- **`en09` failure (cuda tugstugi).** The app logged an `answer` reply and then nothing within the harness's 120 s turn limit: the reply's speech did not finish in time. The cause is not known yet (the answer text is not logged).
+- **Gemini during these runs** (2026-11-24, 00:30-02:40 local time, UTC+6). In diagnostic probes (not measurements) `gemini-3.1-flash-lite` returned 503 to many requests. The model that answered is not logged per turn.
+- **arif11 column.** The key's daily Gemini quota ran out during this run: 17 turns were `llm_rate_limited`, from `mx04` on (turn 52 of 72). The run has 27 counted turns, below the blueprint's 30.
+- **`en09` failure (cuda tugstugi).** The server log shows the `answer` reply at 01:55:36, no `stage` or `timing` events after it, and `call_ended` 109 s later, when the harness's 120 s turn limit ended the call. The cause is not known yet; the answer text is not logged.
 
 Run conditions, all columns: `eval/latency.py --launch` (runbook, "Latency evaluation"), `git_dirty` false; the 72 `rag_test` questions (`rag_test.csv`, SHA-256 `82958d25…`) spoken by the MMS voices, not people, streamed in real time as 20 ms frames, one call at a time, after one uncounted warm-up turn; LLM: Gemini through `GeminiClient`; voices and the embedder on the CPU; values are the runs' metrics rounded to 3 decimals. The cuda runs ran after the runbook's GPU check passed in the same session (`P0`, every run at `sm_mhz_limit`, no clock event reasons). The runs on `46d3bed` ran from a clean worktree of that commit with the main checkout's virtual environment (the worktree's own `uv sync` stalled on a download), with nothing else heavy on the machine. Leaving handoffs out of the stage rows also leaves out slow LLM paths that end in a handoff, which biases `llm` and TTFA low; `ttfa_all_turns` includes them. A recorded speaker may give different ASR times and turn ends.
 

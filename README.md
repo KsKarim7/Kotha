@@ -6,7 +6,7 @@ A Bangla-English voice AI agent and call-analytics platform for Nodi Telecom, a 
 
 ## Status
 
-Milestone 1 (a browser call works) is built, apart from the items under "Limits and next" that need people (a real microphone test in a browser, recordings, listeners). A call takes speech in Bangla, English or a mix of both, and Kotha answers questions about Nodi Telecom's packs and policies by voice, citing the documents it used. Calls were tested with synthetic speech streamed over the WebSocket. The speech and retrieval models run on one machine's CPU with Docker Compose; the LLM is Gemini, a remote API. The phone path, account actions, barge-in and post-call analytics come in later milestones.
+Milestone 1 (a browser call works) is built, apart from the items under "Limits and next" that need people (a repeat microphone call in a browser, recordings, listeners). A call takes speech in Bangla, English or a mix of both, and Kotha answers questions about Nodi Telecom's packs and policies by voice, citing the documents it used. Calls were tested with synthetic speech streamed over the WebSocket. The speech and retrieval models run on one machine, on the CPU by default (the Docker stack is CPU-only; ASR can run on the local GPU, see EVALUATION.md); the LLM is Gemini, a remote API. The phone path, account actions, barge-in and post-call analytics come in later milestones.
 
 ## What works now
 
@@ -93,8 +93,8 @@ ASR word error rates, the VAD ablation and the TTS listening scores need the rec
 ## Limits and next
 
 - **Latency.** The per-stage p50 and p95 for the CPU and the GPU are in [EVALUATION.md](EVALUATION.md#latency), with the cold-start breakdown; the interpretation is still to be written. The blueprint plans streamed LLM tokens for MS2.
-- **Handoffs.** In the latest runs 26 of 72 synthetic turns ended in a handoff, most of them `no_answer`, and English questions most often (EVALUATION.md lists the reasons). Each handoff now says why, in the log and on the page.
-- **Gemini free tier.** On 2026-11-23 `gemini-3.1-flash-lite` answered 503 to most requests, and the key's daily quota ran out after a day of evaluation runs. A handoff then says `llm_unavailable` or `llm_rate_limited`; the runbook ("Running the app") says what to do.
+- **Handoffs.** In the two tugstugi runs on `46d3bed`, 26 of 72 synthetic turns ended in a handoff, most of them `no_answer`, and English questions most often (EVALUATION.md lists the reasons). Each handoff now says why, in the log and on the page.
+- **Gemini free tier.** On 2026-11-23 and 24 (local time) `gemini-3.1-flash-lite` answered 503 to many requests in diagnostic probes, and the key's daily quota ran out after a day of evaluation runs. A handoff then says `llm_unavailable` or `llm_rate_limited`; the runbook ("Running the app") says what to do.
 - **Speech recognition.** The default live model is a Bangla fine-tune (`bn-tugstugi-medium-ct2`). How it handles English speech is not measured yet; choosing the live model from measured WER is still open (M3-6). ADR 0005 records the GPU latency of both fine-tunes as input.
 - **Guardrails.** Account requests and account claims are caught by patterns in code; ADR 0008 lists phrasings they still miss and proposes a structural rule for MS2.
 - **Not yet built.** Account tools and the mock BSS, barge-in, the phone path through Asterisk, and post-call analytics.
