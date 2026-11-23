@@ -70,9 +70,11 @@ class FakePipeline:
     def __init__(self, release: threading.Event | None = None) -> None:
         self.questions: list[str] = []
         self.release = release
+        self.entered = threading.Event()
 
     def reply(self, question: str) -> BotReply:
         self.questions.append(question)
+        self.entered.set()
         if self.release is not None:
             self.release.wait(timeout=5)
         sources = (
@@ -533,6 +535,7 @@ def test_a_disconnect_while_the_pipeline_runs_ends_the_call_without_hanging(
             started(websocket)
             say(websocket)
             events_until(websocket, "transcript")
+            assert pipeline.entered.wait(timeout=5)
 
     assert finishes_within(10, hang_up_mid_turn)
     release.set()
