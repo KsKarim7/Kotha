@@ -350,14 +350,17 @@ cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
   from process start to ready also includes Python imports and is measured from outside.
 - Logs carry only event names, call ids, reply kinds, languages, handoff reasons and error codes;
   never what the caller or the bot said.
-- After a handoff the page says why, and the log has it: `docker compose logs app | grep reason=`
-  (or the uvicorn output). The LLM reasons point outside the code:
-  - `llm_unavailable` (the page says "overloaded or unreachable"): Gemini answered 503 or could
-    not be reached on all attempts. On the free tier this is Google's capacity. Wait a minute and
-    ask again; if it persists, check the network and Google's status page, or move to a paid tier.
-  - `llm_rate_limited`: the key's quota is used up (429). See the limits in Google AI Studio;
-    daily quotas reset at midnight Pacific time.
-  - `llm_timeout`: no attempt answered within the 12 s deadline; usually overload as well.
+- After a handoff the page says why, and the log has it:
+  `docker compose logs app | grep 'event=reply.*reason='` (or the uvicorn output). An LLM reason
+  names how the last attempt failed; earlier attempts may have failed differently. They point
+  outside the code:
+  - `llm_unavailable` (the page says "overloaded or unreachable"): the last attempt got a 5xx, a
+    connection failure or an unreadable response. On the free tier this is usually Google's
+    capacity (503 "high demand"). Wait a minute and ask again; if it persists, check the network
+    and Google's status page, or move to a paid tier.
+  - `llm_rate_limited`: a rate limit or quota was reached (429). A per-minute limit clears within
+    a minute; daily quotas reset at midnight Pacific time. The limits are in Google AI Studio.
+  - `llm_timeout`: the last attempt timed out (or Gemini returned 408); usually overload as well.
   - `llm_error`: the request was refused (4xx, for example a revoked key) or the answer was cut
     off. Check `GEMINI_API_KEY` in `.env` and that the app started without errors.
 
