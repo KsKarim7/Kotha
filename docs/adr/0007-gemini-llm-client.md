@@ -35,12 +35,14 @@ checked on the date above; numbered sources are under References.
 - `kotha.llm.client` defines the `LLMClient` protocol, `generate(system_prompt, user_prompt)`, and
   typed errors. Callers depend only on these. `kotha.llm.fake.FakeLLMClient` serves tests.
 - `kotha.llm.gemini.GeminiClient` uses `google-genai`. The key comes only from `GEMINI_API_KEY`.
-- The first attempt uses `gemini-3.1-flash-lite`. One retry, on a timeout, rate limit, 5xx or
-  connection failure, uses `gemini-3.5-flash-lite`, so a retry does not depend on the same
+- The first attempt uses `gemini-3.1-flash-lite`. Up to two retries, on a timeout, rate limit, 5xx
+  or connection failure, use `gemini-3.5-flash-lite`, so a retry does not depend on the same
   overloaded model. Rejected requests and empty or incomplete answers are not retried.
-- `generate` has a hard deadline of 12 s in total: the first attempt gets at most 4 s, and the retry
-  runs only if at least 2 s are left, with whatever remains. Each attempt runs on a pool of 16
-  workers and is abandoned at its budget. A 12 s client timeout is also set; it applies per httpx
+- After a transient failure, `gemini-3.1-flash-lite` rests for 60 s: calls in that time start on
+  `gemini-3.5-flash-lite` and get two attempts. The first call after the rest tries it again.
+- `generate` has a hard deadline of 12 s in total. Every attempt but the last gets at most 4 s, a
+  retry runs only if at least 2 s are left, and the last attempt gets whatever remains. Each attempt
+  runs on a pool of 16 workers and is abandoned at its budget. A 12 s client timeout is also set; it applies per httpx
   phase and sends `X-Server-Timeout: 12`, so it is a backstop that frees an abandoned worker and lets
   the server drop the work.
 - Thinking is set to `MINIMAL` and the output limit is 512 tokens. An answer counts only if the model
@@ -50,6 +52,22 @@ checked on the date above; numbered sources are under References.
   carries neither the provider's message nor the SDK error, whose request holds the key and prompt.
 - The key must be printable ASCII without spaces, checked at start-up.
 - `generate` is blocking. Callers on the event loop must use `asyncio.to_thread`.
+
+## Update 2026-11-23: one retry was not enough
+A real browser call handed off with `llm_seconds` 12.84, the client's deadline. Probes on this key
+that day, recording only status codes and timings:
+- `gemini-3.1-flash-lite` returned `503 UNAVAILABLE` ("This model is currently experiencing high
+  demand") to 8 of 8 one-line prompts, each within about 1.5 s, and to 11 of 12 answer prompts.
+- `gemini-3.5-flash-lite` answered 8 of 8 one-line prompts (one after 10.4 s). With answer
+  prompts it sometimes returned 503 or did not answer within 4 s.
+- With one retry, the retry inherited about 11 s and a stalled request used all of it: 5 of 8
+  spoken calls through the Docker stack handed off at 12.0 s.
+
+Hence the extra retry, the 4 s cap on all but the last attempt, and the rest for the primary. In
+the app with the cap and three attempts, the LLM's text came from the third attempt in 4 of 10
+spoken calls, and 2 of the 10 still failed all three. These are uncommitted probes, not
+measurements. The free tier's capacity stays outside this code: when both models are overloaded,
+the call still hands off.
 
 ## Alternatives considered
 - **`google-generativeai`:** deprecated [1].
@@ -69,9 +87,11 @@ checked on the date above; numbered sources are under References.
   settings, not measurements; M8 measures latency and may change them.
 - **An abandoned attempt keeps its worker** until the backstop ends it, which can take 12 s per
   stalled phase, and longer if a server trickles bytes, because the read timeout restarts on each
-  one; the caller's deadline still holds. A stalled call can abandon two workers, so 8 concurrent stalled calls fill the pool
-  of 16 for tens of seconds, and later calls time out meanwhile. Size the pool to at least twice the
-  expected concurrent calls (M8).
+  one; the caller's deadline still holds. A stalled call can abandon three workers, so 6 concurrent
+  stalled calls fill the pool of 16 for tens of seconds, and later calls time out meanwhile. Size
+  the pool to at least three times the expected concurrent calls (M8).
+- **A resting primary costs speed, not answers.** While it rests, answers come from the slower
+  `gemini-3.5-flash-lite`; a primary that recovers is found within a minute.
 - **Unexpected exceptions are not hidden.** Only known transport and parse failures become typed
   errors; anything else is a bug and is raised as it is.
 - **One client per process.** `GeminiClient` owns a connection pool and workers; `close()` frees them.

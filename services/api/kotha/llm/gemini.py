@@ -22,8 +22,11 @@ from kotha.llm.client import (
 API_KEY_VARIABLE = "GEMINI_API_KEY"
 PRIMARY_MODEL = "gemini-3.1-flash-lite"
 RETRY_MODEL = "gemini-3.5-flash-lite"
+# an overloaded free-tier model answers 503 within about a second, so one retry wastes the deadline
+ATTEMPT_MODELS = (PRIMARY_MODEL, RETRY_MODEL, RETRY_MODEL)
+PRIMARY_REST_S = 60.0
 TOTAL_DEADLINE_S = 12.0
-PRIMARY_ATTEMPT_S = 4.0
+ATTEMPT_S = 4.0
 MIN_RETRY_S = 2.0
 TEMPERATURE = 0.2
 MAX_OUTPUT_TOKENS = 512
@@ -73,16 +76,22 @@ class GeminiClient:
             http_options=types.HttpOptions(httpx_client=self._http, timeout=BACKSTOP_TIMEOUT_MS),
         )
         self._workers = ThreadPoolExecutor(WORKER_THREADS, thread_name_prefix="gemini")
+        self._primary_rests_until = 0.0
 
     def generate(self, system_prompt: str, user_prompt: str) -> str:
         deadline = time.monotonic() + TOTAL_DEADLINE_S
-        try:
-            return self._attempt(PRIMARY_MODEL, system_prompt, user_prompt, PRIMARY_ATTEMPT_S)
-        except LLMTransientError:
-            remaining = deadline - time.monotonic()
-            if remaining < MIN_RETRY_S:
-                raise
-            return self._attempt(RETRY_MODEL, system_prompt, user_prompt, remaining)
+        primary_resting = time.monotonic() < self._primary_rests_until
+        *early_models, last_model = ATTEMPT_MODELS[1:] if primary_resting else ATTEMPT_MODELS
+        for model in early_models:
+            budget_s = min(ATTEMPT_S, deadline - time.monotonic())
+            try:
+                return self._attempt(model, system_prompt, user_prompt, budget_s)
+            except LLMTransientError:
+                if model == PRIMARY_MODEL:
+                    self._primary_rests_until = time.monotonic() + PRIMARY_REST_S
+                if deadline - time.monotonic() < MIN_RETRY_S:
+                    raise
+        return self._attempt(last_model, system_prompt, user_prompt, deadline - time.monotonic())
 
     def close(self) -> None:
         self._workers.shutdown(wait=False, cancel_futures=True)
