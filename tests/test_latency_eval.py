@@ -202,6 +202,23 @@ def test_an_answered_turn_has_no_handoff_reason() -> None:
     assert (result.handoff_reason, result.rejections) == ("", "")
 
 
+def test_the_harness_keeps_sending_frames_while_a_slow_greeting_plays() -> None:
+    frames_during_greeting: list[int] = []
+
+    async def slow_greeting(websocket: ServerConnection) -> None:
+        await websocket.recv()
+        await websocket.send(json.dumps({"type": "bot_text", "kind": "greeting"}))
+        frames = 0
+        async with asyncio.timeout(0.5):
+            while frames < 10:
+                frames += isinstance(await websocket.recv(), bytes)
+        frames_during_greeting.append(frames)
+        await websocket.close()
+
+    measured(slow_greeting)
+    assert frames_during_greeting == [10]
+
+
 def test_a_turn_that_ends_before_the_clip_is_split() -> None:
     result = measured(scripted_server(speech_end_after=3))
     assert result.split

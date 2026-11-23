@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import threading
+import time
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import replace
@@ -564,23 +565,46 @@ def test_a_client_that_goes_silent_is_closed_as_going_away(
 ) -> None:
     monkeypatch.setattr("kotha.api.session.CLIENT_SILENCE_TIMEOUT_S", 0.3)
     caplog.set_level(logging.INFO, logger="kotha")
-    with call() as websocket:
-        started(websocket)
-        events = events_until(websocket, "closed")
+    events: list[Event] = []
+
+    def stay_silent() -> None:
+        with call() as websocket:
+            started(websocket)
+            events.extend(events_until(websocket, "closed"))
+
+    assert finishes_within(10, stay_silent)
     assert events[-1] == {"type": "closed", "code": 1001}
     assert any("event=call_timeout" in message for message in caplog.messages)
     assert any("reason=client_silent" in message for message in caplog.messages)
 
 
+def test_the_silence_limit_counts_from_the_last_message_not_from_the_start(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr("kotha.api.session.CLIENT_SILENCE_TIMEOUT_S", 0.3)
+    caplog.set_level(logging.INFO, logger="kotha")
+    with call() as websocket:
+        started(websocket)
+        for _ in range(8):
+            websocket.send_bytes(float_to_pcm16(np.zeros(WINDOW_SAMPLES, dtype=np.float32)))
+            time.sleep(0.1)
+        websocket.send_text(json.dumps({"type": "stop"}))
+        assert events_until(websocket, "closed")[-1] == {"type": "closed", "code": 1000}
+    assert not any("event=call_timeout" in message for message in caplog.messages)
+
+
 class UnreadSocket:
     def __init__(self) -> None:
         self.never_drained = asyncio.Event()
+        self.started = False
 
     async def accept(self) -> None:
         pass
 
     async def receive(self) -> dict[str, Any]:
-        await asyncio.sleep(0.05)
+        if self.started:
+            await self.never_drained.wait()
+        self.started = True
         return {"type": "websocket.receive", "text": json.dumps(START)}
 
     async def send_text(self, text: str) -> None:
