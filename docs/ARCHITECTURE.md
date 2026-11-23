@@ -314,8 +314,8 @@ any client must keep sending, during the greeting too (the latency harness sends
 and a send that does not finish within 10 s, because the client stopped reading, ends the call.
 Both log `event=call_timeout` with the reason `client_silent` or `client_not_reading`. A reply
 sentence is one frame (a 6 s sentence is about 192 KB), so a link slower than about 150 kbit/s
-could hit the send limit. After a handoff
-for failed turns the count starts again, so the call goes on if the caller keeps talking.
+could hit the send limit. After a handoff for failed turns the count starts again, so the call
+goes on if the caller keeps talking.
 
 Silero, ASR, the pipeline and TTS all share the default `asyncio.to_thread` pool. Under several
 concurrent calls, a long LLM call or an abandoned thread can delay another call's VAD step; M8-3
