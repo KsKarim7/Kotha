@@ -72,6 +72,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - Calls handed off when Gemini's free tier was overloaded: `GeminiClient` now makes up to three attempts within its 12 s deadline (at most 4 s for each but the last) and rests `gemini-3.1-flash-lite` for 60 s after a transient failure (ADR 0007 update).
+- Clock times were spoken as "eighteen o'clock": they are now read on a 12-hour clock with the time of day, "six in the evening", "midnight", "noon", and "সন্ধ্যা ছয়টা", "রাত বারোটা" (the Bangla period word is left out when the text already names one).
 - A handoff now says why: an LLM failure is `llm_timeout`, `llm_unavailable`, `llm_rate_limited` or `llm_error` instead of `llm_failed`, the `reply` log event carries the reason, and the page shows it in words.
 - The `timing` event carries the reply kind, the handoff reason and the verifier rules every rejected answer of the turn broke (also logged as `answer_rejected` events, names only), and `eval/latency.py` writes them as per-turn `handoff_reason` and `rejections` columns and logs reason counts to MLflow.
 - A bare package code such as `NT-30GB` now finds the document that lists it: BM25 also scores each table row on its own, and a chunk counts with its best unit (ADR 0006 update). `BM25Okapi.top` is removed, since nothing uses it.

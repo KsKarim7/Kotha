@@ -151,7 +151,7 @@ def test_latin_words_in_bangla_become_bangla_script(sentence: str, spoken: str) 
         ("Open 24 hours.", "open twenty four hours"),
         ("About 20% more.", "about twenty percent more"),
         ("Up to 1,000 minutes.", "up to one thousand minutes"),
-        ("From 9:30.", "from nine thirty"),
+        ("From 9:30.", "from nine thirty in the morning"),
     ],
 )
 def test_english_numbers_and_data_sizes_become_words(sentence: str, spoken: str) -> None:
@@ -210,14 +210,38 @@ def test_stars_and_hashes_are_spoken_only_inside_a_code_with_digits(
 @pytest.mark.parametrize(
     ("sentence", "lang", "spoken"),
     [
-        ("Open 10:00 to 18:00.", "en", "open ten o'clock to eighteen o'clock"),
-        ("From 9:05 or 9:30.", "en", "from nine oh five or nine thirty"),
-        ("সকাল ১০:০০ থেকে ১০:৩০", "bn", "সকাল দশটা থেকে দশটা ত্রিশ মিনিট"),
+        ("Open 10:00 to 18:00.", "en", "open ten in the morning to six in the evening"),
+        ("From 9:05.", "en", "from nine oh five in the morning"),
+        ("Or 18:30.", "en", "or six thirty in the evening"),
+        ("সকাল ১০:০০ থেকে ১০:৩০", "bn", "সকাল দশটা থেকে সকাল দশটা ত্রিশ মিনিট"),
+        ("রাতে ২৩:০০ টায় বন্ধ", "bn", "রাতে এগারোটায় বন্ধ"),
+        ("১৮:০০টায় বন্ধ", "bn", "সন্ধ্যা ছয়টায় বন্ধ"),
+        ("১৮:৩০টার পরে", "bn", "সন্ধ্যা ছয়টা ত্রিশ মিনিটের পরে"),
+        ("১০:০০টা থেকে", "bn", "সকাল দশটা থেকে"),
+        ("১০:০০ টাকা", "bn", "সকাল দশটা টাকা"),
         ("Score 25:70.", "en", "score twenty five seventy"),
     ],
 )
 def test_clock_times_are_read_as_times(sentence: str, lang: Language, spoken: str) -> None:
     assert speakable(sentence, lang) == nfc(spoken)
+
+
+@pytest.mark.parametrize(
+    ("clock", "english", "bangla"),
+    [
+        ("00:00", "midnight", "রাত বারোটা"),
+        ("08:00", "eight in the morning", "সকাল আটটা"),
+        ("10:00", "ten in the morning", "সকাল দশটা"),
+        ("12:00", "noon", "দুপুর বারোটা"),
+        ("18:00", "six in the evening", "সন্ধ্যা ছয়টা"),
+        ("23:00", "eleven at night", "রাত এগারোটা"),
+    ],
+)
+def test_a_24_hour_time_is_spoken_on_a_12_hour_clock_with_the_time_of_day(
+    clock: str, english: str, bangla: str
+) -> None:
+    assert speakable(f"Open at {clock}.", "en") == f"open at {english}"
+    assert speakable(f"{clock} পর্যন্ত খোলা।", "bn") == nfc(f"{bangla} পর্যন্ত খোলা")
 
 
 @pytest.mark.parametrize(
