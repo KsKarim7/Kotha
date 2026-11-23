@@ -279,9 +279,9 @@ cd ~/kotha && HF_HUB_OFFLINE=1 uv run python eval/tts_probe.py --sentences liste
 - RTF is synthesis time over audio length, one synthesis per speakable sentence as in the app (a
   row with two sentences becomes `<id>.1` and `<id>.2`), after one untimed warm-up synthesis per
   voice. Only `--sentences listening` runs give the RTF for `EVALUATION.md`; a probe-mode run also
-  prints and logs RTF, with the parameter `sentences` set to `probe`. The script prints and logs p50 and p95 per voice (`rtf.bn.*`, `rtf.en.*`, with the
-  sentence counts: 14 bn and 6 en, so the en p95 rests on six values) to the `kotha-tts`
-  experiment, with the git tags, the voices' revisions, the seed, the torch thread count and the
+  prints and logs RTF, with the parameter `sentences` set to `probe`.
+- The script prints and logs p50 and p95 per voice (`rtf.bn.*`, `rtf.en.*`, with the sentence
+  counts: 14 bn and 6 en, so the en p95 rests on six values) to the `kotha-tts` experiment, with the git tags, the voices' revisions, the seed, the torch thread count and the
   sheet's SHA-256. `timings.csv` in `--output-dir` has one row per sentence and is the run's
   artifact.
 
