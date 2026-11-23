@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -11,7 +12,7 @@ from kotha.audio.convert import SAMPLE_RATE_HZ
 from kotha.dialogue.answer import FIXED_REPLIES, GREETING, ReplyKind
 from kotha.dialogue.routing import Language
 from kotha.tts.mms import VOICES, MmsVoice
-from kotha.tts.service import TtsService, fixed_prompts, to_telephony_rate
+from kotha.tts.service import TtsService, fixed_prompts, load_tts_service, to_telephony_rate
 from kotha.tts.speakable import VOICE_CHARACTERS, speakable_sentences
 
 voices_are_cached = all(
@@ -75,6 +76,18 @@ def test_fixed_prompts_are_the_greeting_and_the_fixed_replies() -> None:
             FIXED_REPLIES[ReplyKind.REPEAT][lang],
             FIXED_REPLIES[ReplyKind.ACCOUNT_UNAVAILABLE][lang],
         ]
+
+
+def test_loading_times_each_voice_and_its_fixed_prompts(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr("kotha.tts.service.MmsVoice", lambda lang: FakeVoice())
+    caplog.set_level(logging.INFO, logger="kotha")
+    service = load_tts_service()
+    steps = [message.rsplit("stage=", 1)[1] for message in caplog.messages]
+    assert steps == ["tts_load_bn", "tts_load_en", "tts_prompts_bn", "tts_prompts_en"]
+    handoff = FIXED_REPLIES[ReplyKind.HANDOFF]["en"]
+    assert service.synthesize(handoff, "en") is service.synthesize(handoff, "en")
 
 
 def test_warmed_prompts_are_served_from_the_cache_without_synthesis() -> None:
