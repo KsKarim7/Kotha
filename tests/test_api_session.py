@@ -666,8 +666,30 @@ def assert_turn_timed_out(events: list[Event]) -> None:
     timing = first(events, "timing")
     assert (timing["kind"], timing["handoff_reason"]) == ("handoff", "turn_timeout")
     assert first(events, "handoff") == {"type": "handoff", "reason": "turn_timeout"}
-    handoffs = [e for e in events if isinstance(e, dict) and e.get("kind") == "handoff"]
-    assert handoffs and "audio" in types(events)[types(events).index("handoff") - 3 :]
+    handoff_text = next(
+        index
+        for index, event in enumerate(events)
+        if isinstance(event, dict) and event.get("kind") == "handoff"
+    )
+    after_handoff = types(events)[handoff_text:]
+    assert after_handoff[0] == "bot_text" and after_handoff[1] == "audio"
+    assert after_handoff[-3:] == ["reply_audio_end", "handoff", "timing"]
+
+
+def test_speech_that_fails_before_its_first_sentence_is_followed_by_the_handoff_prompt() -> None:
+    class FailFirst(FakeTts):
+        async def speak(self, text: str, lang: Language) -> AsyncIterator[np.ndarray]:
+            if text == "Visit a service centre.":
+                raise RuntimeError("synthesis failed")
+            yield np.full(160, 0.25, dtype=np.float32)
+            yield np.full(160, 0.25, dtype=np.float32)
+
+    with call(tts=FailFirst()) as websocket:
+        started(websocket)
+        say(websocket)
+        events = events_until(websocket, "timing")
+    assert first(events, "error") == {"type": "error", "code": "tts_failed"}
+    assert_turn_timed_out(events)
 
 
 @pytest.mark.parametrize("stalled", ["pipeline", "speech"])
