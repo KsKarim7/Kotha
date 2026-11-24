@@ -56,6 +56,8 @@ GOING_AWAY = 1001
 CLIENT_SILENCE_TIMEOUT_S = 30.0
 # a client that stops reading lets the socket buffer fill, and every send then waits forever
 SEND_TIMEOUT_S = 10.0
+# above the highest measured TTFA p95 (27.1 s, CPU, MLflow fba66a2f), so only a stuck turn is cut
+TURN_WATCHDOG_S = 30.0
 
 
 @dataclass(frozen=True)
@@ -234,6 +236,26 @@ class CallSession:
             return None
 
     async def _answer(self, turn_audio: np.ndarray) -> None:
+        heard = anyio.Event()
+        timed_out = False
+        async with anyio.create_task_group() as turn:
+
+            async def watchdog() -> None:
+                nonlocal timed_out
+                with anyio.move_on_after(TURN_WATCHDOG_S):
+                    await heard.wait()
+                    return
+                timed_out = True
+                turn.cancel_scope.cancel()
+
+            turn.start_soon(watchdog)
+            await self._answer_turn(turn_audio, heard)
+            turn.cancel_scope.cancel()
+        if timed_out:
+            # a stuck model thread is abandoned; the caller hears the cached handoff prompt
+            await self._respond(handoff(self._lang, HandoffReason.TURN_TIMEOUT), None)
+
+    async def _answer_turn(self, turn_audio: np.ndarray, heard: anyio.Event) -> None:
         asr_started = time.perf_counter()
         transcript = await self._transcribe(turn_audio)
         asr_seconds = time.perf_counter() - asr_started
@@ -246,13 +268,18 @@ class CallSession:
             await self._outgoing.put(TranscriptEvent(text=transcript.text))
             reply = await asyncio.to_thread(self._services.pipeline.reply, transcript.text)
             self._lang = reply.lang
+        await self._respond(reply, asr_seconds, heard)
+
+    async def _respond(
+        self, reply: BotReply, asr_seconds: float | None, heard: anyio.Event | None = None
+    ) -> None:
         details = {"reason": reply.handoff_reason.value} if reply.handoff_reason else {}
         if reply.model:
             details["model"] = reply.model
         log_event("reply", call_id=self.call_id, kind=reply.kind.value, lang=reply.lang, **details)
         for rejection in reply.rejections:
             log_event("answer_rejected", call_id=self.call_id, reason=rejection.value)
-        tts_first_audio_seconds = await self._speak(bot_text(reply))
+        tts_first_audio_seconds = await self._speak(bot_text(reply), heard)
         stages = StageSeconds(
             asr_seconds=asr_seconds,
             retrieval_seconds=reply.stage_seconds.get("retrieval"),
@@ -280,7 +307,7 @@ class CallSession:
             return handoff(self._lang, HandoffReason.FAILED_TURNS)
         return fixed_reply(ReplyKind.REPEAT, self._lang)
 
-    async def _speak(self, text: BotText) -> float | None:
+    async def _speak(self, text: BotText, heard: anyio.Event | None = None) -> float | None:
         await self._outgoing.put(text)
         started = time.perf_counter()
         first_audio_seconds = None
@@ -289,6 +316,8 @@ class CallSession:
                 if first_audio_seconds is None:
                     first_audio_seconds = time.perf_counter() - started
                 await self._outgoing.put(float_to_pcm16(sentence_audio))
+                if heard is not None:
+                    heard.set()
         except MODEL_ERRORS as error:
             log_event("tts_failed", call_id=self.call_id, error=type(error).__name__)
             await self._outgoing.put(ErrorEvent(code="tts_failed"))

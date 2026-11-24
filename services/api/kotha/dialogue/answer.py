@@ -133,6 +133,7 @@ class HandoffReason(StrEnum):
     RETRIEVAL_FAILED = "retrieval_failed"
     NO_TIME_TO_RETRY = "no_time_to_retry"
     FAILED_TURNS = "failed_turns"
+    TURN_TIMEOUT = "turn_timeout"
 
 
 class Rejection(StrEnum):
