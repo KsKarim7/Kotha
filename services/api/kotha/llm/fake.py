@@ -1,6 +1,10 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from kotha.llm.client import Generation
+
+FAKE_MODEL = "fake-model"
+
 
 @dataclass(frozen=True)
 class FakeLLMCall:
@@ -13,9 +17,9 @@ class FakeLLMClient:
         self._replies = list(replies)
         self.calls: list[FakeLLMCall] = []
 
-    def generate(self, system_prompt: str, user_prompt: str) -> str:
+    def generate(self, system_prompt: str, user_prompt: str) -> Generation:
         self.calls.append(FakeLLMCall(system_prompt, user_prompt))
         reply = self._replies.pop(0)
         if isinstance(reply, Exception):
             raise reply
-        return reply
+        return Generation(reply, FAKE_MODEL)

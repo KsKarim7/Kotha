@@ -250,7 +250,9 @@ reply to a caller's turn ends with a `timing` event (an addition; after `reply_a
 `handoff`, so it is always the turn's last event) with `asr_seconds`,
 `retrieval_seconds`, `llm_seconds` and `tts_first_audio_seconds`, each `null` when that stage did
 not run; `eval/latency.py` reads it, and each value is also logged as `event=stage`. It also
-carries the reply `kind`, the `handoff_reason` (`null` unless a handoff) and `rejections`, the
+carries the reply `kind`, the `model` of the turn's last LLM generation (`null` when the LLM gave
+no text; also logged as `model=` on the `reply` event), the `handoff_reason` (`null` unless a
+handoff) and `rejections`, the
 verifier rules every rejected answer of the turn broke, in order, so a rule broken by both
 attempts appears twice (each is also logged as `event=answer_rejected reason=<rule>`, never the
 answer itself). Error

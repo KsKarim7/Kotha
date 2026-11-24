@@ -199,6 +199,7 @@ def test_a_handoff_turn_records_its_reason_and_rules_in_the_csv(tmp_path: Path) 
         "kind": "handoff",
         "handoff_reason": "rejected_twice",
         "rejections": ["unsupported_number", "too_long"],
+        "model": "gemini-x",
     }
     handoff = scripted_server(speech_end_after=CLIP_FRAMES + 3, timing=rejected, kind="handoff")
     result = measured(handoff)
@@ -213,11 +214,13 @@ def test_a_handoff_turn_records_its_reason_and_rules_in_the_csv(tmp_path: Path) 
     with output.open(encoding="utf-8") as written:
         reader = csv.DictReader(written)
         [row] = reader
-    assert reader.fieldnames is not None and reader.fieldnames[-2:] == [
+    assert reader.fieldnames is not None and reader.fieldnames[-3:] == [
         "handoff_reason",
         "rejections",
+        "model",
     ]
     assert row["handoff_reason"] == "rejected_twice"
+    assert row["model"] == "gemini-x"
     assert row["rejections"] == "unsupported_number;too_long"
 
 

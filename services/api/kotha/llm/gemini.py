@@ -9,6 +9,7 @@ from google import genai
 from google.genai import errors, types
 
 from kotha.llm.client import (
+    Generation,
     LLMConfigurationError,
     LLMEmptyResponseError,
     LLMError,
@@ -76,18 +77,21 @@ class GeminiClient:
         )
         self._workers = ThreadPoolExecutor(WORKER_THREADS, thread_name_prefix="gemini")
 
-    def generate(self, system_prompt: str, user_prompt: str) -> str:
+    def generate(self, system_prompt: str, user_prompt: str) -> Generation:
         deadline = time.monotonic() + TOTAL_DEADLINE_S
         # the retry model declines answerable questions more often: start each call on the primary
         *early_models, last_model = ATTEMPT_MODELS
         for model in early_models:
             budget_s = min(ATTEMPT_S, deadline - time.monotonic())
             try:
-                return self._attempt(model, system_prompt, user_prompt, budget_s)
+                return Generation(self._attempt(model, system_prompt, user_prompt, budget_s), model)
             except LLMTransientError:
                 if deadline - time.monotonic() < MIN_RETRY_S:
                     raise
-        return self._attempt(last_model, system_prompt, user_prompt, deadline - time.monotonic())
+        remaining_s = deadline - time.monotonic()
+        return Generation(
+            self._attempt(last_model, system_prompt, user_prompt, remaining_s), last_model
+        )
 
     def close(self) -> None:
         self._workers.shutdown(wait=False, cancel_futures=True)
