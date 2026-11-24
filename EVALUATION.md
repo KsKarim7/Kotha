@@ -163,26 +163,26 @@ Run conditions, all columns: `eval/latency.py --launch` (runbook, "Latency evalu
 
 ### After the quality run (2026-11-24)
 
-Same harness and conditions as above, on commit `6928b41` (answering model recorded per turn, the 30 s turn watchdog in place), after a passing GPU check, p50 / p95 in seconds:
+The same harness on commit `6928b41` (answering model recorded per turn, the 30 s turn watchdog in place), after a passing GPU check; the test set's SHA-256 is now `30a845e8…` (with the split column), the questions unchanged. p50 / p95 in seconds:
 
-| Stage | cuda, tugstugi `int8_float16` |
-| --- | --- |
-| vad | 0.748 / 0.767 |
-| asr | 1.578 / 1.905 |
-| retrieval | 0.309 / 0.682 |
-| llm | 5.198 / 5.713 |
-| tts_first_audio | 3.742 / 7.515 |
-| TTFA, from the true end of speech | 11.464 / 15.998 |
-| TTFA, from the VAD decision | 10.724 / 15.248 |
-| TTFA over all heard turns | 10.303 / 15.354 (70) |
-| Counted turns | 45 |
-| Replies of 72: answers / handoffs | 45 / 27 |
-| Split / failed turns | 2 / 0 |
-| Handoff reasons | `no_answer` 26 (bn 6, en 13, mix 7), `no_time_to_retry` 1 (verifier rules `missing_citation`, `unsupported_number`, `too_long`) |
-| Model of each turn's last generation, 3.1-flash-lite / 3.5-flash-lite | all 72 turns: 7 / 65; the 45 answers: 7 / 38 |
-| MLflow run (`kotha-latency`) | `544813c212994e85aac15590ac9b56ea` |
+| Stage | cuda, tugstugi `int8_float16` | cuda, arif11 `int8_float16` |
+| --- | --- | --- |
+| vad | 0.748 / 0.767 | 0.751 / 0.763 |
+| asr | 1.578 / 1.905 | 1.195 / 1.732 |
+| retrieval | 0.309 / 0.682 | 0.328 / 0.466 |
+| llm | 5.198 / 5.713 | 5.190 / 5.872 |
+| tts_first_audio | 3.742 / 7.515 | 3.619 / 7.317 |
+| TTFA, from the true end of speech | 11.464 / 15.998 | 10.915 / 14.810 |
+| TTFA, from the VAD decision | 10.724 / 15.248 | 10.157 / 14.055 |
+| TTFA over all heard turns | 10.303 / 15.354 (70) | 8.291 / 13.650 (70) |
+| Counted turns | 45 | 39 |
+| Replies of 72: answers / handoffs / other | 45 / 27 / 0 | 39 / 32 / 1 repeat |
+| Split / failed turns | 2 / 0 | 2 / 0 |
+| Handoff reasons | `no_answer` 26 (bn 6, en 13, mix 7), `no_time_to_retry` 1 (verifier rules `missing_citation`, `unsupported_number`, `too_long`) | `no_answer` 32 (bn 5, en 17, mix 10) |
+| Model of each turn's last generation, 3.1-flash-lite / 3.5-flash-lite | all 72 turns: 7 / 65; the 45 answers: 7 / 38 | 71 turns with a generation: 16 / 55; the 39 answers: 12 / 27 |
+| MLflow run (`kotha-latency`) | `544813c212994e85aac15590ac9b56ea` | `790badcc5f84467184fbffb54b0d74d9` |
 
-No turn failed and none ended with `turn_timeout` (no such handoff reason in the run). `no_answer` handoffs: spoken 26 here; typed (answer rate above) 2 on dev and 0 on test. The test set's SHA-256 for this run is `30a845e8…` (with the split column).
+No turn failed and none ended with `turn_timeout` or `llm_rate_limited` (no such handoff reason in either run). `no_answer` handoffs: spoken 26 and 32 here; typed (answer rate above) 2 on dev and 0 on test.
 
 ### Cold start
 
