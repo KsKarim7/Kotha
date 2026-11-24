@@ -244,6 +244,7 @@ class CallSession:
                 nonlocal timed_out
                 with anyio.move_on_after(TURN_WATCHDOG_S):
                     await heard.wait()
+                if heard.is_set():
                     return
                 timed_out = True
                 turn.cancel_scope.cancel()
@@ -280,6 +281,10 @@ class CallSession:
         for rejection in reply.rejections:
             log_event("answer_rejected", call_id=self.call_id, reason=rejection.value)
         tts_first_audio_seconds = await self._speak(bot_text(reply), heard)
+        if tts_first_audio_seconds is None and reply.kind != ReplyKind.HANDOFF:
+            # speech failed before its first sentence, so the caller heard nothing
+            await self._respond(handoff(self._lang, HandoffReason.TURN_TIMEOUT), None)
+            return
         stages = StageSeconds(
             asr_seconds=asr_seconds,
             retrieval_seconds=reply.stage_seconds.get("retrieval"),

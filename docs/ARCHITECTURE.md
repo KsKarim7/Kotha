@@ -318,10 +318,14 @@ and a send that does not finish within 10 s, because the client stopped reading,
 Both log `event=call_timeout` with the reason `client_silent` or `client_not_reading`. A reply
 sentence is one frame (a 6 s sentence is about 192 KB), so a link slower than about 150 kbit/s
 could hit the send limit. A turn watchdog makes sure a caller never waits in silence: if no
-audio frame of the reply has gone out 30 s after the turn started (above the highest measured
-TTFA p95, 27.1 s on the CPU), the turn's work is cancelled (a stuck model thread is abandoned),
-the cached handoff prompt is spoken, and the turn ends with `turn_timeout`. Once the first frame
-is out, the watchdog stands down. After a handoff for failed turns the count starts again, so the call
+audio frame of the reply has been queued 30 s after the turn was taken up (about 0.75 s after the
+caller stopped, plus any wait behind the previous turn; above the highest measured TTFA p95,
+27.1 s on the CPU, so only unusually slow turns are cut), the turn's work is cancelled, the cached
+handoff prompt is spoken, and the turn ends with `turn_timeout`. The same happens when speech
+fails before its first sentence. Once the first frame is queued, the watchdog stands down. A
+stuck ASR or pipeline thread is abandoned and keeps its CPU and a slot of the default thread pool
+until it returns. If the cut came during speech, the unheard reply was already logged as
+`event=reply` and shown on the page; the `turn_timeout` reply follows it. After a handoff for failed turns the count starts again, so the call
 goes on if the caller keeps talking.
 
 Silero, ASR, the pipeline and TTS all share the default `asyncio.to_thread` pool. Under several

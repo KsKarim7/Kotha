@@ -75,8 +75,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- A turn could leave the caller in silence (one latency turn got no reply audio within 120 s): a 30 s watchdog now speaks the handoff prompt and ends the turn with `turn_timeout` when no reply audio has gone out.
-
+- A turn could leave the caller in silence (one latency turn got no reply audio within 120 s): a 30 s watchdog now speaks the handoff prompt and ends the turn with `turn_timeout` when no reply audio has gone out, or when speech fails before its first sentence.
 - The app sent a handoff's `handoff` event after the turn's `timing`, which the latency harness takes as the end of the turn: `timing` is now always a turn's last event, and the harness records a `handoff_mismatch` failure when a handoff turn lacks its event or the two reasons differ. The pgvector image is pinned by digest in compose and CI.
 - A call could hang on a client that stopped sending or reading: a client silent for 30 s is closed with 1001, and a send that waits more than 10 s ends the call. The latency harness sends silence while the greeting plays, as a browser does.
 - Calls handed off when Gemini's free tier was overloaded: `GeminiClient` now makes up to three attempts within its 12 s deadline (at most 4 s for each but the last), starting every call on `gemini-3.1-flash-lite` (ADR 0007 updates). A 60 s rest for the primary after a failure was tried and removed: it sent nearly every answer to `gemini-3.5-flash-lite`, which in a diagnostic probe replied `NO_ANSWER` to answerable questions far more often.
