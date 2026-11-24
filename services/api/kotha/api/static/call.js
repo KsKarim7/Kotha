@@ -13,6 +13,7 @@ const HANDOFF_REASONS = {
   llm_error: "the language model refused the request or gave no complete answer",
   retrieval_failed: "the knowledge base search failed",
   failed_turns: "two turns in a row could not be understood",
+  turn_timeout: "the answer took too long, so the call was handed over instead of staying silent",
 };
 
 const consent = document.getElementById("consent");

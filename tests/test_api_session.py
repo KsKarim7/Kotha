@@ -643,3 +643,56 @@ def test_a_client_that_stops_reading_ends_the_call_instead_of_blocking(
     asyncio.run(run_briefly())
     assert any("reason=client_not_reading" in message for message in caplog.messages)
     assert any(message.startswith("event=call_ended") for message in caplog.messages)
+
+
+class SilentTts(FakeTts):
+    async def speak(self, text: str, lang: Language) -> AsyncIterator[np.ndarray]:
+        self.spoken.append((text, lang))
+        if text == FIXED_REPLIES[ReplyKind.HANDOFF][lang] or text == GREETING[lang]:
+            yield np.full(160, 0.25, dtype=np.float32)
+            return
+        await asyncio.sleep(60)
+        yield np.full(160, 0.25, dtype=np.float32)
+
+
+class SlowSecondSentenceTts(FakeTts):
+    async def speak(self, text: str, lang: Language) -> AsyncIterator[np.ndarray]:
+        yield np.full(160, 0.25, dtype=np.float32)
+        await asyncio.sleep(0.5)
+        yield np.full(160, 0.25, dtype=np.float32)
+
+
+def assert_turn_timed_out(events: list[Event]) -> None:
+    timing = first(events, "timing")
+    assert (timing["kind"], timing["handoff_reason"]) == ("handoff", "turn_timeout")
+    assert first(events, "handoff") == {"type": "handoff", "reason": "turn_timeout"}
+    handoffs = [e for e in events if isinstance(e, dict) and e.get("kind") == "handoff"]
+    assert handoffs and "audio" in types(events)[types(events).index("handoff") - 3 :]
+
+
+@pytest.mark.parametrize("stalled", ["pipeline", "speech"])
+def test_a_stalled_turn_is_handed_off_instead_of_leaving_the_caller_in_silence(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, stalled: str
+) -> None:
+    monkeypatch.setattr("kotha.api.session.TURN_WATCHDOG_S", 0.3)
+    caplog.set_level(logging.INFO, logger="kotha")
+    release = threading.Event()
+    pipeline = FakePipeline(release) if stalled == "pipeline" else FakePipeline()
+    tts = SilentTts() if stalled == "speech" else FakeTts()
+    try:
+        with call(pipeline=pipeline, tts=tts) as websocket:
+            started(websocket)
+            say(websocket)
+            assert_turn_timed_out(events_until(websocket, "timing"))
+    finally:
+        release.set()
+    assert any("reason=turn_timeout" in message for message in caplog.messages)
+
+
+def test_a_turn_that_started_speaking_in_time_is_not_cut(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("kotha.api.session.TURN_WATCHDOG_S", 0.3)
+    with call(tts=SlowSecondSentenceTts()) as websocket:
+        started(websocket)
+        say(websocket)
+        timing = first(events_until(websocket, "timing"), "timing")
+    assert (timing["kind"], timing["handoff_reason"]) == ("answer", None)

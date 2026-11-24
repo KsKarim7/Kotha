@@ -241,7 +241,7 @@ connection is one call. Messages are Pydantic models in `kotha.api.protocol`.
 | `transcript` | a turn passed ASR and the gate | `text`, `final` (always true in MS1) |
 | `bot_text` | before the bot speaks | `kind` (`greeting`, `answer`, `account_unavailable`, `handoff`, `repeat`), `lang`, `text`, `citations` (`doc_id`, `title`, one per document) |
 | `reply_audio_end` | after the last audio frame of a reply (an addition) | none |
-| `handoff` | after a handoff reply has been spoken, before the turn's `timing` | `reason` (`no_answer`, `rejected_twice`, `no_time_to_retry`, `llm_timeout`, `llm_unavailable`, `llm_rate_limited`, `llm_error`, `retrieval_failed`, `failed_turns`), also logged on the `reply` event and shown on the page; the blueprint's summary comes with M6-full |
+| `handoff` | after a handoff reply has been spoken, before the turn's `timing` | `reason` (`no_answer`, `rejected_twice`, `no_time_to_retry`, `llm_timeout`, `llm_unavailable`, `llm_rate_limited`, `llm_error`, `retrieval_failed`, `failed_turns`, `turn_timeout`), also logged on the `reply` event and shown on the page; the blueprint's summary comes with M6-full |
 | `error` | a message was refused or TTS failed | `code` |
 | `playback_stop` | not sent in MS1; it belongs to barge-in (MS2) | |
 
@@ -317,7 +317,11 @@ any client must keep sending, during the greeting too (the latency harness sends
 and a send that does not finish within 10 s, because the client stopped reading, ends the call.
 Both log `event=call_timeout` with the reason `client_silent` or `client_not_reading`. A reply
 sentence is one frame (a 6 s sentence is about 192 KB), so a link slower than about 150 kbit/s
-could hit the send limit. After a handoff for failed turns the count starts again, so the call
+could hit the send limit. A turn watchdog makes sure a caller never waits in silence: if no
+audio frame of the reply has gone out 30 s after the turn started (above the highest measured
+TTFA p95, 27.1 s on the CPU), the turn's work is cancelled (a stuck model thread is abandoned),
+the cached handoff prompt is spoken, and the turn ends with `turn_timeout`. Once the first frame
+is out, the watchdog stands down. After a handoff for failed turns the count starts again, so the call
 goes on if the caller keeps talking.
 
 Silero, ASR, the pipeline and TTS all share the default `asyncio.to_thread` pool. Under several
