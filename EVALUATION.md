@@ -99,7 +99,7 @@ The typed `rag_test` questions asked through the real answer pipeline (hybrid re
 | test | en | 12 | 0.833 (10) | 0.800 | `llm_timeout` 1, `no_time_to_retry` 1 | 4 / 6 |
 | test | mix | 11 | 1.000 (11) | 0.909 | none | 5 / 6 |
 
-Runs: `eval/answers.py` (runbook, "Answer-rate evaluation") on commit `b3d4d91`, `git_dirty` false, experiment `kotha-answers`: dev MLflow run `a2a10d57115d4783ba3db8d81a82578b`, test `7a8b73a0fd1c4c94b8f818799cedfa85`; 2026-11-24, 14:19-14:38 Dhaka time. No 429 was seen (the script stops at the first one). Dev failures as recorded: `no_answer` on two questions whose gold document was not among those retrieved; `no_time_to_retry` on one with `unknown_citation` and `unsupported_number`; one `llm_timeout`. No prompt, verifier or retry-model change was made after reading them.
+Runs: `eval/answers.py` (runbook, "Answer-rate evaluation") on commit `b3d4d91` (branch commit; its tree equals `b3f9703` on main), `git_dirty` false, experiment `kotha-answers`: dev MLflow run `a2a10d57115d4783ba3db8d81a82578b`, test `7a8b73a0fd1c4c94b8f818799cedfa85`; outputs written 2026-11-24 at 14:25 (dev) and 14:31 (test) Dhaka time. No 429 was seen (the script stops at the first one). Dev failures as recorded: `no_answer` on two questions whose gold document was not among those retrieved; `no_time_to_retry` on one with `unknown_citation` and `unsupported_number`; one `llm_timeout`. No prompt, verifier or retry-model change was made after reading them.
 
 Interpretation: [to be written by Khaled]
 
@@ -179,10 +179,10 @@ Same harness and conditions as above, on commit `6928b41` (answering model recor
 | Replies of 72: answers / handoffs | 45 / 27 |
 | Split / failed turns | 2 / 0 |
 | Handoff reasons | `no_answer` 26 (bn 6, en 13, mix 7), `no_time_to_retry` 1 (verifier rules `missing_citation`, `unsupported_number`, `too_long`) |
-| Model of each turn's last generation (all 72 turns; answers only) | `gemini-3.5-flash-lite` 65, `gemini-3.1-flash-lite` 7; answers 38 / 7 |
+| Model of each turn's last generation, 3.1-flash-lite / 3.5-flash-lite | all 72 turns: 7 / 65; the 45 answers: 7 / 38 |
 | MLflow run (`kotha-latency`) | `544813c212994e85aac15590ac9b56ea` |
 
-No turn timed out (`turn_timeout` 0) and none failed. The same questions typed (answer rate above) give few `no_answer` handoffs; the app decodes speech in Bangla (`language="bn"`), so English questions arrive in Bengali script (runbook, "Running the app").
+No turn failed and none ended with `turn_timeout` (no such handoff reason in the run). `no_answer` handoffs: spoken 26 here; typed (answer rate above) 2 on dev and 0 on test. The test set's SHA-256 for this run is `30a845e8…` (with the split column).
 
 ### Cold start
 
