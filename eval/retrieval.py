@@ -31,6 +31,7 @@ EXPERIMENT_NAME = "kotha-retrieval"
 TESTSET_COLUMNS = ("id", "lang", "doc_id", "question")
 LANGS = ("bn", "en", "mix")
 ALL_LANGS = "all"
+SPLITS = ("dev", "test")
 HIT_CUTOFF = 3
 RETRIEVER_NAMES = ("dense", "bm25", "hybrid", "hybrid_lexicon")
 RESULT_COLUMNS = ("question_id", "lang", "doc_id", "retriever", "rank")
@@ -44,6 +45,7 @@ class Question:
     lang: str
     doc_id: str
     text: str
+    split: str = ""
 
 
 @dataclass(frozen=True)
@@ -60,6 +62,7 @@ class GroupScore:
     questions: int
     hit_at_3: float
     mrr: float
+    split: str = ALL_LANGS
 
 
 def read_testset(path: Path, known_doc_ids: Collection[str]) -> list[Question]:
@@ -75,7 +78,12 @@ def read_testset(path: Path, known_doc_ids: Collection[str]) -> list[Question]:
                 raise ValueError(
                     f"test set {path}, line {line}: expected {len(TESTSET_COLUMNS)} fields"
                 )
-            question = Question(row["id"], row["lang"], row["doc_id"], row["question"].strip())
+            split = row.get("split", "")
+            if split not in ("", *SPLITS):
+                raise ValueError(f"test set {path}, line {line}: unknown split {split!r}")
+            question = Question(
+                row["id"], row["lang"], row["doc_id"], row["question"].strip(), split
+            )
             problem = question_problem(question, seen_ids, known_doc_ids)
             if problem:
                 raise ValueError(f"test set {path}, line {line}: {problem}")
@@ -142,33 +150,42 @@ def evaluate(questions: Sequence[Question], rankers: Mapping[str, Ranker]) -> li
     ]
 
 
-def group_score(retriever: str, lang: str, results: Sequence[QuestionResult]) -> GroupScore:
+def group_score(
+    retriever: str, lang: str, results: Sequence[QuestionResult], split: str = ALL_LANGS
+) -> GroupScore:
     ranks = [result.rank for result in results]
     hits = sum(1 for rank in ranks if rank is not None and rank <= HIT_CUTOFF)
     reciprocal_ranks = sum(1 / rank for rank in ranks if rank is not None)
-    return GroupScore(retriever, lang, len(ranks), hits / len(ranks), reciprocal_ranks / len(ranks))
+    return GroupScore(
+        retriever, lang, len(ranks), hits / len(ranks), reciprocal_ranks / len(ranks), split
+    )
 
 
 def score(results: Sequence[QuestionResult]) -> list[GroupScore]:
     scores: list[GroupScore] = []
-    for retriever in RETRIEVER_NAMES:
-        retriever_results = [result for result in results if result.retriever == retriever]
-        for lang in (ALL_LANGS, *LANGS):
-            group = [
-                result
-                for result in retriever_results
-                if lang == ALL_LANGS or result.question.lang == lang
-            ]
-            if group:
-                scores.append(group_score(retriever, lang, group))
+    for split in (ALL_LANGS, *SPLITS):
+        for retriever in RETRIEVER_NAMES:
+            for lang in (ALL_LANGS, *LANGS):
+                group = [
+                    result
+                    for result in results
+                    if result.retriever == retriever
+                    and lang in (ALL_LANGS, result.question.lang)
+                    and split in (ALL_LANGS, result.question.split)
+                ]
+                if group:
+                    scores.append(group_score(retriever, lang, group, split))
     return scores
 
 
 def group_metrics(scores: Sequence[GroupScore]) -> dict[str, float]:
     metrics: dict[str, float] = {}
     for group in scores:
-        metrics[f"{group.retriever}.{group.lang}.hit_at_3"] = group.hit_at_3
-        metrics[f"{group.retriever}.{group.lang}.mrr"] = group.mrr
+        prefix = f"{group.retriever}.{group.lang}"
+        if group.split != ALL_LANGS:
+            prefix = f"{group.retriever}.{group.split}.{group.lang}"
+        metrics[f"{prefix}.hit_at_3"] = group.hit_at_3
+        metrics[f"{prefix}.mrr"] = group.mrr
     return metrics
 
 
@@ -206,10 +223,10 @@ def write_results(path: Path, results: Sequence[QuestionResult]) -> None:
 
 
 def print_scores(scores: Sequence[GroupScore]) -> None:
-    print("retriever\tlang\tn\thit@3\tmrr")
+    print("split\tretriever\tlang\tn\thit@3\tmrr")
     for group in scores:
         print(
-            f"{group.retriever}\t{group.lang}\t{group.questions}"
+            f"{group.split}\t{group.retriever}\t{group.lang}\t{group.questions}"
             f"\t{group.hit_at_3:.4f}\t{group.mrr:.4f}"
         )
 

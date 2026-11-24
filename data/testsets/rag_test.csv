@@ -1,73 +1,73 @@
-id,lang,doc_id,question
-en01,en,packages-internet,what do I get with NT-30GB and how long will it last
-en02,en,packages-internet,how many days does NT-1GB run for
-en03,en,packages-internet,can I use NT-NIGHT-5GB during the day
-en04,en,packages-voice,how many minutes come with NV-300
-en05,en,packages-voice,do the minutes in my voice pack work when I ring someone on another network
-en06,en,packages-combo,what exactly is inside NC-25GB
-en07,en,package-activation,I bought a pack by mistake and want to cancel it
-en08,en,package-activation,my auto renew failed because I had no credit will it try again next time
-en09,en,recharge-methods,can I top up with a scratch card
-en10,en,recharge-problems,the top up failed but the money still went
-en11,en,recharge-problems,I sent credit to my brother's old number by accident
-en12,en,balance-check,what do I dial to see how much talk time is left
-en13,en,validity,I have not touched this line for months will it get cut off
-en14,en,sim-replacement,my sim card is cracked what should I bring to get another one
-en15,en,sim-lost-or-stolen,someone grabbed my phone on the bus how do I shut the number down
-en16,en,account-verification,I typed my pin wrong three times and now it will not work
-en17,en,account-verification,a man called me and wants my pin is that really your staff
-en18,en,data-rollover,does the data I did not finish carry over to next month
-en19,en,roaming,I am flying out next week will this number work over there
-en20,en,complaints,where do I report really bad service
-en21,en,complaints,nobody has answered my ticket for over a week who can I go to now
-en22,en,refunds,you charged me twice can I have that back
-en23,en,service-hours,is your customer centre open on friday and when does it shut
-en24,en,service-hours,can I reach someone on the helpline at midnight
-bn01,bn,packages-internet,এক মাসের জন্য সবচেয়ে বেশি ডেটা কোন প্যাকে পাব
-bn02,bn,packages-internet,শুধু রাতে চালানোর জন্য আলাদা কোনো প্যাক আছে
-bn03,bn,packages-voice,শুধু কথা বলার জন্য কী কী প্যাক নেওয়া যায়
-bn04,bn,packages-voice,অন্য অপারেটরের নম্বরে ফোন দিলে প্যাকের মিনিট কাটবে কি
-bn05,bn,packages-combo,ইন্টারনেট আর কথা একসাথে পাওয়া যায় এমন প্যাক আছে নাকি
-bn06,bn,package-activation,যে প্যাকটা কিনেছি সেটা বন্ধ করে দিতে চাই
-bn07,bn,package-activation,ভুলে প্যাকটা অফ করে দিয়েছি ওটা কি ফিরে পাব
-bn08,bn,recharge-methods,পাশের দোকান থেকে কি ফোনে টাকা ভরা যায়
-bn09,bn,recharge-methods,আমার ওয়ালেটের টাকা দিয়ে ফোনে ব্যালেন্স নেওয়া যাবে
-bn10,bn,recharge-problems,ছোট ভাইয়ের নম্বর ভেবে অচেনা নম্বরে টাকা ভরে ফেলেছি ফেরত আনা যাবে
-bn11,bn,recharge-problems,আধা ঘণ্টা হয়ে গেল রিচার্জ এখনো ঢোকেনি
-bn12,bn,balance-check,ফোনে কত টাকা আছে সেটা দেখব কীভাবে
-bn13,bn,balance-check,আর কতটুকু ডেটা বাকি আছে জানার উপায় কী
-bn14,bn,validity,সিম অনেকদিন ফেলে রাখলে কি নম্বরটা চলে যায়
-bn15,bn,validity,নম্বরের মেয়াদ বাড়াতে হলে আমাকে কী করতে হবে
-bn16,bn,sim-replacement,সিমটা নষ্ট হয়ে গেছে নতুন একটা তুলতে কী কী লাগবে
-bn17,bn,sim-lost-or-stolen,ফোন চুরি হয়ে গেছে নম্বরটা এখনই বন্ধ করব কীভাবে
-bn18,bn,account-verification,পিন তিনবার ভুল দিয়ে ফেলেছি এখন কী হবে
-bn19,bn,data-rollover,মাস শেষে না চালানো ডেটা কি পরের মাসে যোগ হয়
-bn20,bn,roaming,বিদেশে গিয়েও কি এই সিমটা চালাতে পারব
-bn21,bn,complaints,অভিযোগ দিলে কতদিনের মধ্যে জবাব পাব
-bn22,bn,refunds,আমার টাকা ভুল করে কেটে নিয়েছেন ফেরত পাব কীভাবে
-bn23,bn,service-hours,আপনাদের সার্ভিস সেন্টার কয়টা পর্যন্ত খোলা থাকে
-bn24,bn,service-hours,সরকারি ছুটির দিনে কি আপনাদের সেবা পাওয়া যায়
-mx01,mix,packages-internet,NT-5GB এর validity কতদিন থাকে
-mx02,mix,packages-internet,NT-15GB কিনলে মোট কত GB পাব
-mx03,mix,packages-internet,NT-60GB নিলে কি পুরো মাস চলবে
-mx04,mix,packages-voice,NV-100 এ কত minute পাওয়া যায়
-mx05,mix,packages-combo,NC-10GB তে data আর minute কত করে আছে
-mx06,mix,packages-internet,data শেষ হয়ে গেলে কি net একদম বন্ধ হয়ে যাবে
-mx07,mix,package-activation,auto renew off করলে কি pack সাথে সাথে বন্ধ হয়ে যাবে
-mx08,mix,package-activation,pack কেনার পর SMS আসেনি আবার কিনব নাকি
-mx09,mix,recharge-methods,voucher number কয়বার ভুল দিলে recharge আটকে যাবে
-mx10,mix,recharge-methods,app থেকে কি recharge করা যায়
-mx11,mix,recharge-problems,recharge failed দেখাচ্ছে কিন্তু টাকা কেটে গেছে
-mx12,mix,balance-check,data balance check করার code টা বলেন
-mx13,mix,balance-check,SMS করে কি main balance জানা যায়
-mx14,mix,validity,main account এর validity শেষ হলে কী হবে
-mx15,mix,sim-replacement,SIM replace করাতে কোথায় যেতে হবে
-mx16,mix,sim-lost-or-stolen,SIM block করার পরে কি একই নম্বর ফিরে পাব
-mx17,mix,account-verification,account PIN আপনারা কখন জিজ্ঞেস করেন
-mx18,mix,account-verification,PIN lock হয়ে গেছে কতক্ষণ পরে আবার try করতে পারব
-mx19,mix,data-rollover,মাসের শেষে যে GB বেঁচে যায় সেটা কি next month এ পাব
-mx20,mix,roaming,দেশের বাইরে যাওয়ার আগে roaming চালু করতে কী করব
-mx21,mix,roaming,abroad থেকে helpline এ call করব কীভাবে
-mx22,mix,complaints,complaint এর ticket number দিয়ে follow up করব কীভাবে
-mx23,mix,refunds,refund চাইলে টাকাটা কোথায় আসবে
-mx24,mix,service-hours,helpline কি 24 hours খোলা থাকে
+id,lang,doc_id,question,split
+en01,en,packages-internet,what do I get with NT-30GB and how long will it last,test
+en02,en,packages-internet,how many days does NT-1GB run for,test
+en03,en,packages-internet,can I use NT-NIGHT-5GB during the day,dev
+en04,en,packages-voice,how many minutes come with NV-300,dev
+en05,en,packages-voice,do the minutes in my voice pack work when I ring someone on another network,test
+en06,en,packages-combo,what exactly is inside NC-25GB,test
+en07,en,package-activation,I bought a pack by mistake and want to cancel it,test
+en08,en,package-activation,my auto renew failed because I had no credit will it try again next time,dev
+en09,en,recharge-methods,can I top up with a scratch card,test
+en10,en,recharge-problems,the top up failed but the money still went,dev
+en11,en,recharge-problems,I sent credit to my brother's old number by accident,test
+en12,en,balance-check,what do I dial to see how much talk time is left,dev
+en13,en,validity,I have not touched this line for months will it get cut off,dev
+en14,en,sim-replacement,my sim card is cracked what should I bring to get another one,dev
+en15,en,sim-lost-or-stolen,someone grabbed my phone on the bus how do I shut the number down,test
+en16,en,account-verification,I typed my pin wrong three times and now it will not work,test
+en17,en,account-verification,a man called me and wants my pin is that really your staff,dev
+en18,en,data-rollover,does the data I did not finish carry over to next month,dev
+en19,en,roaming,I am flying out next week will this number work over there,test
+en20,en,complaints,where do I report really bad service,test
+en21,en,complaints,nobody has answered my ticket for over a week who can I go to now,dev
+en22,en,refunds,you charged me twice can I have that back,dev
+en23,en,service-hours,is your customer centre open on friday and when does it shut,test
+en24,en,service-hours,can I reach someone on the helpline at midnight,dev
+bn01,bn,packages-internet,এক মাসের জন্য সবচেয়ে বেশি ডেটা কোন প্যাকে পাব,dev
+bn02,bn,packages-internet,শুধু রাতে চালানোর জন্য আলাদা কোনো প্যাক আছে,test
+bn03,bn,packages-voice,শুধু কথা বলার জন্য কী কী প্যাক নেওয়া যায়,dev
+bn04,bn,packages-voice,অন্য অপারেটরের নম্বরে ফোন দিলে প্যাকের মিনিট কাটবে কি,test
+bn05,bn,packages-combo,ইন্টারনেট আর কথা একসাথে পাওয়া যায় এমন প্যাক আছে নাকি,dev
+bn06,bn,package-activation,যে প্যাকটা কিনেছি সেটা বন্ধ করে দিতে চাই,dev
+bn07,bn,package-activation,ভুলে প্যাকটা অফ করে দিয়েছি ওটা কি ফিরে পাব,test
+bn08,bn,recharge-methods,পাশের দোকান থেকে কি ফোনে টাকা ভরা যায়,test
+bn09,bn,recharge-methods,আমার ওয়ালেটের টাকা দিয়ে ফোনে ব্যালেন্স নেওয়া যাবে,dev
+bn10,bn,recharge-problems,ছোট ভাইয়ের নম্বর ভেবে অচেনা নম্বরে টাকা ভরে ফেলেছি ফেরত আনা যাবে,test
+bn11,bn,recharge-problems,আধা ঘণ্টা হয়ে গেল রিচার্জ এখনো ঢোকেনি,dev
+bn12,bn,balance-check,ফোনে কত টাকা আছে সেটা দেখব কীভাবে,dev
+bn13,bn,balance-check,আর কতটুকু ডেটা বাকি আছে জানার উপায় কী,test
+bn14,bn,validity,সিম অনেকদিন ফেলে রাখলে কি নম্বরটা চলে যায়,dev
+bn15,bn,validity,নম্বরের মেয়াদ বাড়াতে হলে আমাকে কী করতে হবে,test
+bn16,bn,sim-replacement,সিমটা নষ্ট হয়ে গেছে নতুন একটা তুলতে কী কী লাগবে,test
+bn17,bn,sim-lost-or-stolen,ফোন চুরি হয়ে গেছে নম্বরটা এখনই বন্ধ করব কীভাবে,dev
+bn18,bn,account-verification,পিন তিনবার ভুল দিয়ে ফেলেছি এখন কী হবে,test
+bn19,bn,data-rollover,মাস শেষে না চালানো ডেটা কি পরের মাসে যোগ হয়,test
+bn20,bn,roaming,বিদেশে গিয়েও কি এই সিমটা চালাতে পারব,dev
+bn21,bn,complaints,অভিযোগ দিলে কতদিনের মধ্যে জবাব পাব,test
+bn22,bn,refunds,আমার টাকা ভুল করে কেটে নিয়েছেন ফেরত পাব কীভাবে,test
+bn23,bn,service-hours,আপনাদের সার্ভিস সেন্টার কয়টা পর্যন্ত খোলা থাকে,dev
+bn24,bn,service-hours,সরকারি ছুটির দিনে কি আপনাদের সেবা পাওয়া যায়,test
+mx01,mix,packages-internet,NT-5GB এর validity কতদিন থাকে,test
+mx02,mix,packages-internet,NT-15GB কিনলে মোট কত GB পাব,test
+mx03,mix,packages-internet,NT-60GB নিলে কি পুরো মাস চলবে,dev
+mx04,mix,packages-voice,NV-100 এ কত minute পাওয়া যায়,dev
+mx05,mix,packages-combo,NC-10GB তে data আর minute কত করে আছে,dev
+mx06,mix,packages-internet,data শেষ হয়ে গেলে কি net একদম বন্ধ হয়ে যাবে,dev
+mx07,mix,package-activation,auto renew off করলে কি pack সাথে সাথে বন্ধ হয়ে যাবে,test
+mx08,mix,package-activation,pack কেনার পর SMS আসেনি আবার কিনব নাকি,dev
+mx09,mix,recharge-methods,voucher number কয়বার ভুল দিলে recharge আটকে যাবে,test
+mx10,mix,recharge-methods,app থেকে কি recharge করা যায়,dev
+mx11,mix,recharge-problems,recharge failed দেখাচ্ছে কিন্তু টাকা কেটে গেছে,dev
+mx12,mix,balance-check,data balance check করার code টা বলেন,dev
+mx13,mix,balance-check,SMS করে কি main balance জানা যায়,test
+mx14,mix,validity,main account এর validity শেষ হলে কী হবে,test
+mx15,mix,sim-replacement,SIM replace করাতে কোথায় যেতে হবে,test
+mx16,mix,sim-lost-or-stolen,SIM block করার পরে কি একই নম্বর ফিরে পাব,dev
+mx17,mix,account-verification,account PIN আপনারা কখন জিজ্ঞেস করেন,test
+mx18,mix,account-verification,PIN lock হয়ে গেছে কতক্ষণ পরে আবার try করতে পারব,dev
+mx19,mix,data-rollover,মাসের শেষে যে GB বেঁচে যায় সেটা কি next month এ পাব,test
+mx20,mix,roaming,দেশের বাইরে যাওয়ার আগে roaming চালু করতে কী করব,dev
+mx21,mix,roaming,abroad থেকে helpline এ call করব কীভাবে,test
+mx22,mix,complaints,complaint এর ticket number দিয়ে follow up করব কীভাবে,dev
+mx23,mix,refunds,refund চাইলে টাকাটা কোথায় আসবে,test
+mx24,mix,service-hours,helpline কি 24 hours খোলা থাকে,dev
