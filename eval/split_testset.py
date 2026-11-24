@@ -35,7 +35,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Add a fixed dev/test split column to rag_test.")
     parser.add_argument("--testset", type=Path, default=TESTSET_PATH)
     args = parser.parse_args()
-    with args.testset.open(newline="", encoding="utf-8") as testset_file:
+    with args.testset.open(newline="", encoding="utf-8-sig") as testset_file:
         reader = csv.DictReader(testset_file)
         columns = [name for name in reader.fieldnames or [] if name != "split"]
         rows = list(reader)
