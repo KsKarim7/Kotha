@@ -318,7 +318,8 @@ prints hit@3 and MRR overall and per language, also per split, and writes one ro
 retriever to `--output`, which must be outside the repository.
 
 `rag_test.csv` has a fixed `split` column: 36 `dev` and 36 `test` questions, stratified by document
-and language, made once by `eval/split_testset.py` (seed 20261124) and committed before any result
+(each document's questions alternate between the halves, ordered by language, so languages are
+interleaved; the per-language counts came out 11-13 per half), made once by `eval/split_testset.py` (seed 20261124) and committed before any result
 per split was looked at. Every prompt, threshold or model change is chosen on `dev` only; `test`
 numbers are reported, never tuned on. A test checks that the committed column is the seeded one.
 
