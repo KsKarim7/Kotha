@@ -94,7 +94,9 @@ CLOCK_TIME = re.compile(
     r"(?:\s?([AaPp])\.?\s?[Mm]\.?(?![A-Za-z]))?"
 )
 # a dash between two clock times is read as "to"
-CLOCK_RANGE_DASH = re.compile(r"(?<=\d:\d\d)\s*[-–]\s*(?=\d{1,2}:\d\d)")
+CLOCK_RANGE_DASH = re.compile(
+    r"(\d:\d\d(?:\s*টা(?:য়|র)?|\s?[AaPp]\.?\s?[Mm]\.?)?)\s*[-–]\s*(?=\d{1,2}:\d\d)"
+)
 RANGE_WORDS: dict[Language, str] = {"bn": " থেকে ", "en": " to "}
 # the case ending after the hour word, and after মিনিট when there are minutes
 BANGLA_TIME_CASE_ENDINGS = {"য়": ("য়", "ে"), "র": ("র", "ের")}
@@ -290,7 +292,7 @@ def spoken_text(sentence: str, lang: Language) -> str:
     text = EMPHASIS.sub(" ", text)
     text = HYPHEN_BEFORE_BANGLA_SUFFIX.sub("", text)
     text = CODE.sub(lambda match: spoken_code(match.group(0), lang), text)
-    text = CLOCK_RANGE_DASH.sub(RANGE_WORDS[lang], text)
+    text = CLOCK_RANGE_DASH.sub(lambda match: match.group(1) + RANGE_WORDS[lang], text)
     text = CLOCK_TIME.sub(lambda match: spoken_time(match, lang), text)
     text = spoken_numbers(text, lang)
     text = DIGITS.sub(lambda match: f" {digit_by_digit(match.group(0), lang)} ", text)
