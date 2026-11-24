@@ -314,8 +314,13 @@ cd ~/kotha && HF_HUB_OFFLINE=1 uv run python eval/listening_sheet.py \
 `eval/retrieval.py` asks every question in `data/testsets/rag_test.csv` and scores four
 retrievers: dense only, BM25 only, hybrid, and hybrid with lexicon expansion. A question counts
 as found at the rank of the first chunk from its gold document, within the top 20. The script
-prints hit@3 and MRR overall and per language, and writes one row per question and retriever to
-`--output`, which must be outside the repository.
+prints hit@3 and MRR overall and per language, also per split, and writes one row per question and
+retriever to `--output`, which must be outside the repository.
+
+`rag_test.csv` has a fixed `split` column: 36 `dev` and 36 `test` questions, stratified by document
+and language, made once by `eval/split_testset.py` (seed 20261124) and committed before any result
+per split was looked at. Every prompt, threshold or model change is chosen on `dev` only; `test`
+numbers are reported, never tuned on. A test checks that the committed column is the seeded one.
 
 It needs Docker Desktop running, the knowledge base ingested and bge-m3 in the Hugging Face cache
 (see "Local database" and "Embedding model and knowledge-base ingestion"):
