@@ -325,8 +325,8 @@ handoff prompt is spoken, and the turn ends with `turn_timeout`. The same happen
 fails before its first sentence. Once the first frame is queued, the watchdog stands down. A
 stuck ASR or pipeline thread is abandoned and keeps its CPU and a slot of the default thread pool
 until it returns. If the cut came during speech, the unheard reply was already logged as
-`event=reply` and shown on the page; the `turn_timeout` reply follows it. After a handoff for failed turns the count starts again, so the call
-goes on if the caller keeps talking.
+`event=reply` and shown on the page; the `turn_timeout` reply follows it. After a handoff for
+failed turns the count starts again, so the call goes on if the caller keeps talking.
 
 Silero, ASR, the pipeline and TTS all share the default `asyncio.to_thread` pool. Under several
 concurrent calls, a long LLM call or an abandoned thread can delay another call's VAD step; M8-3

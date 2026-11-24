@@ -283,7 +283,7 @@ class CallSession:
         tts_first_audio_seconds = await self._speak(bot_text(reply), heard)
         if tts_first_audio_seconds is None and reply.kind != ReplyKind.HANDOFF:
             # speech failed before its first sentence, so the caller heard nothing
-            await self._respond(handoff(self._lang, HandoffReason.TURN_TIMEOUT), None)
+            await self._respond(handoff(self._lang, HandoffReason.TURN_TIMEOUT), asr_seconds, heard)
             return
         stages = StageSeconds(
             asr_seconds=asr_seconds,
