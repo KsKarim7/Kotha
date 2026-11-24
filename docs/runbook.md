@@ -392,6 +392,28 @@ cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
   - `llm_error`: the request was refused (4xx, for example a revoked key) or the answer was cut
     off. Check `GEMINI_API_KEY` in `.env` and that the app started without errors.
 
+## Answer-rate evaluation (text mode)
+
+`eval/answers.py` asks the typed `rag_test` questions of one split (`--split dev|test|all`) through
+the real answer pipeline: hybrid retrieval, Gemini and the verifier, with no audio, so ASR plays no
+part. Per question it writes the reply kind, handoff reason, verifier rules, the model that
+produced the text, the cited documents and the documents retrieved, to `--output` (outside the
+repository). It reports per split and language: the share answered with citations, handoffs by
+reason, other reply kinds, the share of answers that cite the gold document, and the answering
+models; `--mlflow-dir` logs them to the `kotha-answers` experiment with the CSV.
+
+It pauses 4 s between questions (`--pause-s`) to stay under the free tier's per-minute limit, and
+prints its worst-case Gemini request count first (6 per question). The Gemini client's transport
+counts every 429, including one that a retry on the other model hid. After the first one the run
+stops: it is invalid, nothing is logged, and no CSV is left at `--output`. The script also refuses
+a database whose `kb_chunks` differ from `data/kb/`.
+
+```bash
+cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
+  && HF_HUB_OFFLINE=1 uv run python eval/answers.py --split dev \
+    --output ~/kotha-runs/answers/dev.csv --mlflow-dir ~/kotha-runs/mlflow
+```
+
 ## Browser smoke test (manual, not in CI)
 
 `eval/browser_smoke.py` makes one call through the real page in headless Chromium. It synthesises
