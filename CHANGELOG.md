@@ -61,6 +61,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Milestone 1 documentation: the README describes what works now, the results with their runs, and the limits; `docs/ARCHITECTURE.md` has an overview diagram and sections on the knowledge base, retrieval and the answer pipeline; `EVALUATION.md` says what each unmeasured result needs; a sprint review in `docs/sprints/2026-W47.md`; and study-log rows for the remaining modules.
 - A fixed dev/test split of `rag_test.csv` (36/36, stratified by document and language, `eval/split_testset.py`), and retrieval scores per split. The new column changes the file's SHA-256 (MLflow `testset_sha256`); the questions are unchanged.
 - The model that produced a turn's LLM text is recorded: `LLMClient.generate` returns a `Generation` (text and model), `BotReply.model` carries it, the app logs it on the `reply` event and sends it in `timing`, and `eval/latency.py` writes a `model` column.
+- `eval/answers.py`: the answer rate of the typed questions in text mode, per split and language, with handoff reasons, gold-document citations and answering models, logged to MLflow (`kotha-answers`).
 - `eval/browser_smoke.py`: a manual smoke test that makes one call through the real page in headless Chromium with a synthetic microphone (runbook, "Browser smoke test").
 
 ### Changed
