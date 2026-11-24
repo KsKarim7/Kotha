@@ -375,6 +375,10 @@ cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
   from process start to ready also includes Python imports and is measured from outside.
 - Logs carry only event names, call ids, reply kinds, languages, handoff reasons, verifier rule
   names and error codes; never what the caller or the bot said.
+- `lang` on the `reply` event is the reply's language, taken from the transcript's script. The
+  ASR decodes in Bangla (`WhisperAsr.transcribe`, `language="bn"`), so English speech comes back
+  in Bengali script and gets a Bangla reply, logged `lang=bn`. Letting the ASR detect the language
+  changes its accuracy and is part of choosing the live ASR setup (M3-6).
 - When an answer of a handed-off turn was rejected (always for `rejected_twice` and
   `no_time_to_retry`, and for an `llm_*` or `no_answer` handoff after a retry), the rules it broke
   are logged as `event=answer_rejected reason=<rule>` lines with the same `call_id`.
