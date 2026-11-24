@@ -21,6 +21,7 @@ from kotha.kb.chunks import chunk_documents
 from kotha.kb.documents import read_documents
 from kotha.kb.ingest import KB_FOLDER
 from kotha.llm.client import (
+    Generation,
     LLMEmptyResponseError,
     LLMRateLimitError,
     LLMRequestError,
@@ -204,6 +205,22 @@ def test_a_reply_names_the_model_of_its_last_generation_and_none_without_one() -
     assert pipeline.reply("what do I bring to replace my SIM").model is None
     pipeline, llm, _ = pipeline_for([])
     assert pipeline.reply("what is my balance").model is None and llm.calls == []
+
+
+class TwoModelLLM:
+    def __init__(self, replies: list[Generation]) -> None:
+        self.replies = replies
+
+    def generate(self, system_prompt: str, user_prompt: str) -> Generation:
+        return self.replies.pop(0)
+
+
+def test_a_regenerated_answer_names_the_model_of_the_second_generation() -> None:
+    rejected = Generation("No citation here.", "first-model")
+    llm = TwoModelLLM([rejected, Generation(GOOD_EN, "second")])
+    pipeline = AnswerPipeline(StaticRetriever((SIM_EN, ROLLOVER_EN)), llm)
+    reply = pipeline.reply("what do I bring to replace my SIM")
+    assert (reply.kind, reply.model) == (ReplyKind.ANSWER, "second")
 
 
 def test_an_answer_and_other_handoffs_carry_no_rejections() -> None:

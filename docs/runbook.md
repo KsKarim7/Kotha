@@ -464,8 +464,9 @@ reasons and the failures (timeout, connection closed, connect failed, bad event,
 when fewer than 30 turns are counted (the blueprint's minimum), and writes one row per turn to
 `--output`, which must be outside the repository. Each row has the reply `kind`, its
 `handoff_reason` and the verifier `rejections` (rule names joined by `;`) from the `timing` event;
-MLflow gets one `handoffs.<reason>` count per reason. A `model` column names the LLM whose text
-decided the turn, and MLflow counts `models.<model>`. A failed turn is recorded and the run goes on.
+MLflow gets one `handoffs.<reason>` count per reason. A `model` column names the LLM of the turn's
+last generation that returned text (after a rejected answer and a failed retry, that is the
+rejected one's model), and MLflow counts `models.<model>`. A failed turn is recorded and the run goes on.
 
 ```bash
 cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
