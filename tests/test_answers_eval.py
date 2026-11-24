@@ -1,12 +1,23 @@
 import csv
 from pathlib import Path
 
+import httpx2
 import pytest
 from test_dialogue_answer import GOOD_EN, pipeline_for
+from test_llm_client import answer, status
 
-from answers import AnswerResult, RateLimitedError, ask, summary, write_results
+from answers import (
+    AnswerResult,
+    RateLimitedError,
+    RateLimitWatch,
+    ask,
+    summary,
+    write_results,
+)
+from kotha.dialogue.answer import AnswerPipeline
 from kotha.llm.client import LLMRateLimitError
 from kotha.llm.fake import FAKE_MODEL
+from kotha.llm.gemini import GeminiClient
 from retrieval import Question
 
 SIM_QUESTION = Question("q1", "en", "sim-replacement", "what do I bring to replace my SIM", "dev")
@@ -41,6 +52,30 @@ def test_a_rate_limited_question_stops_the_run() -> None:
     pipeline, _, retriever = pipeline_for([LLMRateLimitError("quota")])
     with pytest.raises(RateLimitedError, match="q1"):
         ask(pipeline, retriever, SIM_QUESTION)
+
+
+def test_a_rate_limit_on_the_regeneration_stops_the_run() -> None:
+    pipeline, _, retriever = pipeline_for(["No citation here.", LLMRateLimitError("quota")])
+    with pytest.raises(RateLimitedError):
+        ask(pipeline, retriever, SIM_QUESTION)
+
+
+def test_a_429_hidden_by_a_successful_retry_still_stops_the_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    responses = [status(429), answer(GOOD_EN)]
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setattr(
+        httpx2.HTTPTransport, "handle_request", lambda self, request: responses.pop(0)
+    )
+    watch = RateLimitWatch()
+    llm = GeminiClient(transport=watch)
+    _, _, retriever = pipeline_for([])
+    pipeline = AnswerPipeline(retriever, llm)
+    with pytest.raises(RateLimitedError):
+        ask(pipeline, retriever, SIM_QUESTION, watch)
+    assert watch.limited == 1
+    llm.close()
 
 
 def test_the_summary_counts_per_split_and_language() -> None:
