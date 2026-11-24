@@ -72,10 +72,12 @@ def test_a_429_hidden_by_a_successful_retry_still_stops_the_run(
     llm = GeminiClient(transport=watch)
     _, _, retriever = pipeline_for([])
     pipeline = AnswerPipeline(retriever, llm)
-    with pytest.raises(RateLimitedError):
-        ask(pipeline, retriever, SIM_QUESTION, watch)
+    try:
+        with pytest.raises(RateLimitedError):
+            ask(pipeline, retriever, SIM_QUESTION, watch)
+    finally:
+        llm.close()
     assert watch.limited == 1
-    llm.close()
 
 
 def test_the_summary_counts_per_split_and_language() -> None:
