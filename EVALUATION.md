@@ -69,7 +69,37 @@ Values are the runs' metrics rounded to 3 decimals. Both runs: `eval/retrieval.p
 
 The ASR-transcribed column needs the recorded test set and the M3 ASR run.
 
+Per split (no retriever change; the split is fixed in `rag_test.csv`, 36/36, `eval/split_testset.py`, seed 20261124), hit@3 / MRR:
+
+| Retriever | dev: all | dev: bn | dev: en | dev: mix | test: all | test: bn | test: en | test: mix |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Dense only | 0.944 / 0.874 | 0.909 / 0.870 | 0.917 / 0.838 | 1.000 / 0.910 | 0.972 / 0.913 | 1.000 / 0.949 | 0.917 / 0.892 | 1.000 / 0.894 |
+| BM25 only | 0.750 / 0.651 | 0.636 / 0.434 | 0.833 / 0.750 | 0.769 / 0.742 | 0.750 / 0.692 | 0.769 / 0.727 | 0.500 / 0.540 | 1.000 / 0.818 |
+| Hybrid (RRF) | 0.917 / 0.842 | 0.818 / 0.709 | 0.917 / 0.833 | 1.000 / 0.962 | 0.889 / 0.838 | 0.923 / 0.853 | 0.833 / 0.787 | 0.909 / 0.877 |
+| Hybrid + lexicon | 0.917 / 0.826 | 0.818 / 0.705 | 0.917 / 0.833 | 1.000 / 0.923 | 0.861 / 0.835 | 0.923 / 0.904 | 0.833 / 0.787 | 0.818 / 0.806 |
+
+Run: commit `6928b41`, `git_dirty` false, MLflow run `7f310418e1f04971a81078e3efdb5ad0`; the whole-set rows equal the "Current retriever" table above. The test-set file's SHA-256 changed with the split column (`30a845e8…`); the questions did not.
+
 The typed questions were written by the knowledge base's author and will be reviewed by Khaled, which tends to raise the scores. Each question has one gold document, although the knowledge base repeats some facts across documents, so a chunk from another document that also answers the question counts as a miss.
+
+Interpretation: [to be written by Khaled]
+
+## Answer rate (text mode)
+
+The typed `rag_test` questions asked through the real answer pipeline (hybrid retrieval, Gemini, the verifier), with no audio, so ASR plays no part. "Answered" means an answer with citations; "gold cited" is the share of answers that cite the question's gold document.
+
+| Split | Lang | Questions | Answered | Gold cited (of answers) | Handoffs by reason | Answers by model (3.1-flash-lite / 3.5-flash-lite) |
+| --- | --- | --- | --- | --- | --- | --- |
+| dev | all | 36 | 0.889 (32) | 0.969 | `no_answer` 2, `llm_timeout` 1, `no_time_to_retry` 1 | 11 / 21 |
+| dev | bn | 11 | 0.818 (9) | 0.889 | `no_answer` 1, `llm_timeout` 1 | 1 / 8 |
+| dev | en | 12 | 0.833 (10) | 1.000 | `no_answer` 1, `no_time_to_retry` 1 | 5 / 5 |
+| dev | mix | 13 | 1.000 (13) | 1.000 | none | 5 / 8 |
+| test | all | 36 | 0.944 (34) | 0.912 | `llm_timeout` 1, `no_time_to_retry` 1 | 15 / 19 |
+| test | bn | 13 | 1.000 (13) | 1.000 | none | 6 / 7 |
+| test | en | 12 | 0.833 (10) | 0.800 | `llm_timeout` 1, `no_time_to_retry` 1 | 4 / 6 |
+| test | mix | 11 | 1.000 (11) | 0.909 | none | 5 / 6 |
+
+Runs: `eval/answers.py` (runbook, "Answer-rate evaluation") on commit `b3d4d91`, `git_dirty` false, experiment `kotha-answers`: dev MLflow run `a2a10d57115d4783ba3db8d81a82578b`, test `7a8b73a0fd1c4c94b8f818799cedfa85`; 2026-11-24, 14:19-14:38 Dhaka time. No 429 was seen (the script stops at the first one). Dev failures as recorded: `no_answer` on two questions whose gold document was not among those retrieved; `no_time_to_retry` on one with `unknown_citation` and `unsupported_number`; one `llm_timeout`. No prompt, verifier or retry-model change was made after reading them.
 
 Interpretation: [to be written by Khaled]
 
@@ -96,7 +126,7 @@ Interpretation: [to be written by Khaled]
 
 Warm calls, one call at a time, in seconds, p50 / p95. Each column is one configuration and one run. Stage rows count answered turns only (not split, not failed); `ttfa_all_turns` counts every heard turn, handoffs included: the time until the caller hears anything.
 
-| Stage | MS1: CPU, tugstugi `int8` (from the code; that run did not log the compute type) | CPU, tugstugi `int8`, primary rest | CPU, tugstugi `int8` | cuda, tugstugi `int8_float16` | cuda, arif11 `int8_float16` (quota ran out) |
+| Stage | MS1: CPU, tugstugi `int8` (from the code; that run did not log the compute type) | CPU, tugstugi `int8`, primary rest | CPU, tugstugi `int8` | cuda, tugstugi `int8_float16` | cuda, arif11 `int8_float16` (**invalid**: the Gemini quota ran out; kept for the record, replaced below) |
 | --- | --- | --- | --- | --- | --- |
 | vad (true end of speech to `speech_end`, 700 ms hangover included) | 0.746 / 0.770 | 0.747 / 0.767 | 0.747 / 0.762 | 0.749 / 0.767 | 0.750 / 0.766 |
 | asr | 5.261 / 9.357 | 6.508 / 8.764 | 5.223 / 9.045 | 1.621 / 1.891 | 1.111 / 1.332 |
@@ -130,6 +160,29 @@ Why the columns differ, as facts of the runs:
 - **`en09` failure (cuda tugstugi).** The server log shows the `answer` reply at 01:55:36, no `stage` or `timing` events after it, and `call_ended` 109 s later, when the harness's 120 s turn limit ended the call. The cause is not known yet; the answer text is not logged.
 
 Run conditions, all columns: `eval/latency.py --launch` (runbook, "Latency evaluation"), `git_dirty` false; the 72 `rag_test` questions (`rag_test.csv`, SHA-256 `82958d25…`) spoken by the MMS voices, not people, streamed in real time as 20 ms frames, one call at a time, after one uncounted warm-up turn; LLM: Gemini through `GeminiClient`; voices and the embedder on the CPU; values are the runs' metrics rounded to 3 decimals. The cuda runs ran after the runbook's GPU check passed in the same session (`P0`, every run at `sm_mhz_limit`, no clock event reasons). The runs on `46d3bed` ran from a clean worktree of that commit with the main checkout's virtual environment (the worktree's own `uv sync` stalled on a download), with nothing else heavy on the machine. Leaving handoffs out of the stage rows also leaves out slow LLM paths that end in a handoff, which biases `llm` and TTFA low; `ttfa_all_turns` includes them. A recorded speaker may give different ASR times and turn ends.
+
+### After the quality run (2026-11-24)
+
+Same harness and conditions as above, on commit `6928b41` (answering model recorded per turn, the 30 s turn watchdog in place), after a passing GPU check, p50 / p95 in seconds:
+
+| Stage | cuda, tugstugi `int8_float16` |
+| --- | --- |
+| vad | 0.748 / 0.767 |
+| asr | 1.578 / 1.905 |
+| retrieval | 0.309 / 0.682 |
+| llm | 5.198 / 5.713 |
+| tts_first_audio | 3.742 / 7.515 |
+| TTFA, from the true end of speech | 11.464 / 15.998 |
+| TTFA, from the VAD decision | 10.724 / 15.248 |
+| TTFA over all heard turns | 10.303 / 15.354 (70) |
+| Counted turns | 45 |
+| Replies of 72: answers / handoffs | 45 / 27 |
+| Split / failed turns | 2 / 0 |
+| Handoff reasons | `no_answer` 26 (bn 6, en 13, mix 7), `no_time_to_retry` 1 (verifier rules `missing_citation`, `unsupported_number`, `too_long`) |
+| Model of each turn's last generation (all 72 turns; answers only) | `gemini-3.5-flash-lite` 65, `gemini-3.1-flash-lite` 7; answers 38 / 7 |
+| MLflow run (`kotha-latency`) | `544813c212994e85aac15590ac9b56ea` |
+
+No turn timed out (`turn_timeout` 0) and none failed. The same questions typed (answer rate above) give few `no_answer` handoffs; the app decodes speech in Bangla (`language="bn"`), so English questions arrive in Bengali script (runbook, "Running the app").
 
 ### Cold start
 
