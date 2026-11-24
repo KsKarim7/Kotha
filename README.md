@@ -83,8 +83,9 @@ Every number comes from a committed evaluation run and is reported, with its run
 | Retrieval, typed questions, hybrid (RRF): hit@3 / MRR | 0.903 / 0.840 (72 questions) | `eval/retrieval.py`, MLflow `39b2a864` |
 | Retrieval, typed questions, dense only: hit@3 / MRR | 0.958 / 0.893 | same run |
 | TTFA from the end of speech, answered turns, ASR on the CPU: p50 / p95 | 16.981 s / 27.149 s (45 turns, synthetic speech) | `eval/latency.py`, MLflow `fba66a2f` |
-| The same, ASR (tugstugi) on the GPU: p50 / p95 | 11.928 s / 20.113 s (44 turns) | `eval/latency.py`, MLflow `64d884be` |
-| TTFA over all heard turns, handoffs included, GPU: p50 / p95 | 10.239 s / 19.132 s (69 turns) | same run |
+| The same, ASR (tugstugi) on the GPU: p50 / p95 | 11.464 s / 15.998 s (45 turns) | `eval/latency.py`, MLflow `544813c2` |
+| TTFA over all heard turns, handoffs included, GPU: p50 / p95 | 10.303 s / 15.354 s (70 turns) | same run |
+| Typed questions answered with citations, text mode: dev / test | 0.889 / 0.944 (36 each) | `eval/answers.py`, MLflow `a2a10d57` / `7a8b73a0` |
 | TTS real-time factor, CPU, p50 (bn / en) | 0.230 / 0.224 | `eval/tts_probe.py`, MLflow `ebbb1c69` |
 | Cold start, process start to ready, CPU | 68.080 s | `eval/cold_start.py`, MLflow `ca512651` |
 
@@ -93,7 +94,7 @@ ASR word error rates, the VAD ablation and the TTS listening scores need the rec
 ## Limits and next
 
 - **Latency.** The per-stage p50 and p95 for the CPU and the GPU are in [EVALUATION.md](EVALUATION.md#latency), with the cold-start breakdown; the interpretation is still to be written. The blueprint plans streamed LLM tokens for MS2.
-- **Handoffs.** In the two tugstugi runs on `46d3bed`, 26 of 72 synthetic turns ended in a handoff, most of them `no_answer`, and English questions most often (EVALUATION.md lists the reasons). Each handoff now says why, in the log and on the page.
+- **Handoffs.** Typed, the questions are answered with citations 89% (dev) and 94% (test) of the time. Spoken, 27 of 72 synthetic turns still hand off (cuda run `544813c2`), almost all `no_answer`, English questions most often: the app decodes speech in Bangla, so English speech arrives in Bengali script. Letting the ASR detect the language is part of choosing the live ASR setup (M3-6). Each handoff says why; a turn that has played no audio after 30 s is handed off (`turn_timeout`) instead of staying silent.
 - **Gemini free tier.** On 2026-11-23 and 24 (local time) `gemini-3.1-flash-lite` answered 503 to many requests in diagnostic probes, and the key's daily quota ran out after a day of evaluation runs. A handoff then says `llm_unavailable` or `llm_rate_limited`; the runbook ("Running the app") says what to do.
 - **Speech recognition.** The default live model is a Bangla fine-tune (`bn-tugstugi-medium-ct2`). How it handles English speech is not measured yet; choosing the live model from measured WER is still open (M3-6). ADR 0005 records the GPU latency of both fine-tunes as input.
 - **Guardrails.** Account requests and account claims are caught by patterns in code; ADR 0008 lists phrasings they still miss and proposes a structural rule for MS2.
