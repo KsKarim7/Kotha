@@ -403,8 +403,10 @@ reason, other reply kinds, the share of answers that cite the gold document, and
 models; `--mlflow-dir` logs them to the `kotha-answers` experiment with the CSV.
 
 It pauses 4 s between questions (`--pause-s`) to stay under the free tier's per-minute limit, and
-prints its worst-case Gemini request count first (6 per question). On the first `llm_rate_limited`
-reply it stops: the run is invalid and nothing is logged.
+prints its worst-case Gemini request count first (6 per question). The Gemini client's transport
+counts every 429, including one that a retry on the other model hid. After the first one the run
+stops: it is invalid, nothing is logged, and no CSV is left at `--output`. The script also refuses
+a database whose `kb_chunks` differ from `data/kb/`.
 
 ```bash
 cd ~/kotha && docker compose up -d --wait db && set -a && . ./.env && set +a \
