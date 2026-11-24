@@ -6,7 +6,18 @@ from contextlib import contextmanager
 
 LOGGER = logging.getLogger("kotha")
 ALLOWED_FIELDS = frozenset(
-    {"call_id", "error", "frames", "kind", "lang", "reason", "seconds", "sentences", "stage"}
+    {
+        "call_id",
+        "error",
+        "frames",
+        "kind",
+        "lang",
+        "model",
+        "reason",
+        "seconds",
+        "sentences",
+        "stage",
+    }
 )
 # a token starts with a letter, so a phone number, PIN or NID number cannot pass as one
 TOKEN = re.compile(r"[A-Za-z][A-Za-z0-9_.-]{0,63}")

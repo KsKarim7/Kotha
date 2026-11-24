@@ -246,8 +246,10 @@ class CallSession:
             await self._outgoing.put(TranscriptEvent(text=transcript.text))
             reply = await asyncio.to_thread(self._services.pipeline.reply, transcript.text)
             self._lang = reply.lang
-        reason = {"reason": reply.handoff_reason.value} if reply.handoff_reason else {}
-        log_event("reply", call_id=self.call_id, kind=reply.kind.value, lang=reply.lang, **reason)
+        details = {"reason": reply.handoff_reason.value} if reply.handoff_reason else {}
+        if reply.model:
+            details["model"] = reply.model
+        log_event("reply", call_id=self.call_id, kind=reply.kind.value, lang=reply.lang, **details)
         for rejection in reply.rejections:
             log_event("answer_rejected", call_id=self.call_id, reason=rejection.value)
         tts_first_audio_seconds = await self._speak(bot_text(reply))
@@ -264,6 +266,7 @@ class CallSession:
             kind=reply.kind,
             handoff_reason=reply.handoff_reason,
             rejections=list(reply.rejections),
+            model=reply.model,
         )
         # timing is the last event of every turn, so a client can stop reading there
         if reply.handoff_reason is not None:

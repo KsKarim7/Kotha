@@ -9,6 +9,7 @@ import pytest
 
 from kotha.llm import gemini
 from kotha.llm.client import (
+    Generation,
     LLMConfigurationError,
     LLMEmptyResponseError,
     LLMError,
@@ -17,7 +18,7 @@ from kotha.llm.client import (
     LLMTimeoutError,
     LLMUnavailableError,
 )
-from kotha.llm.fake import FakeLLMCall, FakeLLMClient
+from kotha.llm.fake import FAKE_MODEL, FakeLLMCall, FakeLLMClient
 from kotha.llm.gemini import GeminiClient
 
 SECRET_KEY = "test-key-value"
@@ -84,7 +85,7 @@ def test_the_settings_are_the_ones_the_adr_records() -> None:
 
 def test_a_request_sends_the_key_prompts_and_settings_and_returns_the_answer() -> None:
     server = Server([answer("  An answer. \n")])
-    assert client_for(server).generate("system", "question") == "An answer."
+    assert client_for(server).generate("system", "question").text == "An answer."
     [request] = server.requests
     body = server.body()
     assert request.headers["x-goog-api-key"] == SECRET_KEY
@@ -137,13 +138,19 @@ def test_a_malformed_key_is_a_configuration_error(
 )
 def test_a_transient_failure_is_retried_on_the_second_model(failure: object) -> None:
     server = Server([failure, answer("Recovered.")])
-    assert client_for(server).generate("system", "question") == "Recovered."
+    assert client_for(server).generate("system", "question").text == "Recovered."
     assert server.models() == ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite"]
+
+
+def test_a_generation_names_the_model_that_answered() -> None:
+    assert client_for(Server([answer("A.")])).generate("s", "q").model == "gemini-3.1-flash-lite"
+    retried = client_for(Server([status(503), answer("B.")])).generate("s", "q")
+    assert retried == Generation("B.", "gemini-3.5-flash-lite")
 
 
 def test_two_overloaded_replies_still_end_in_an_answer() -> None:
     server = Server([status(503), status(503), answer("Third time.")])
-    assert client_for(server).generate("system", "question") == "Third time."
+    assert client_for(server).generate("system", "question").text == "Third time."
     assert server.models() == [
         "gemini-3.1-flash-lite",
         "gemini-3.5-flash-lite",
@@ -166,8 +173,8 @@ def test_every_call_starts_on_the_primary_even_after_it_failed(
     monkeypatch.setattr(gemini, "ATTEMPT_S", 0.2)
     server = Server([primary_failure, answer("One."), answer("Two.")])
     client = client_for(server)
-    assert client.generate("system", "first") == "One."
-    assert client.generate("system", "second") == "Two."
+    assert client.generate("system", "first").text == "One."
+    assert client.generate("system", "second").text == "Two."
     assert server.models() == [
         "gemini-3.1-flash-lite",
         "gemini-3.5-flash-lite",
@@ -259,7 +266,7 @@ def test_a_slow_attempt_is_abandoned_at_its_budget_and_the_retry_gets_the_rest(
 
     server = Server([stall, answer("In time.")])
     started = time.monotonic()
-    assert client_for(server).generate("system", "question") == "In time."
+    assert client_for(server).generate("system", "question").text == "In time."
     assert time.monotonic() - started < 1.0
 
 
@@ -280,7 +287,7 @@ def test_a_stalled_retry_is_abandoned_and_the_last_attempt_gets_the_rest(
 
     server = Server([status(503), stall, slower_than_one_attempt])
     started = time.monotonic()
-    assert client_for(server).generate("system", "question") == "In time."
+    assert client_for(server).generate("system", "question").text == "In time."
     assert time.monotonic() - started < 1.0
     assert len(server.requests) == 3
 
@@ -311,7 +318,7 @@ def test_concurrent_calls_each_get_their_own_answer() -> None:
     results: dict[int, str] = {}
 
     def ask(number: int) -> None:
-        results[number] = client.generate("system", f"q{number}")
+        results[number] = client.generate("system", f"q{number}").text
 
     threads = [threading.Thread(target=ask, args=(number,)) for number in range(40)]
     for thread in threads:
@@ -343,7 +350,7 @@ def test_a_call_still_queued_when_the_client_closes_raises_a_typed_error(
 
     def ask() -> None:
         try:
-            outcomes.append(client.generate("system", "question"))
+            outcomes.append(client.generate("system", "question").text)
         except LLMError as error:
             outcomes.append(type(error))
 
@@ -380,7 +387,7 @@ def test_a_real_stalled_socket_frees_its_worker_at_the_backstop(
 
 def test_the_fake_client_replays_replies_and_records_calls() -> None:
     client = FakeLLMClient(["first", LLMTimeoutError("slow")])
-    assert client.generate("system", "one") == "first"
+    assert client.generate("system", "one") == Generation("first", FAKE_MODEL)
     with pytest.raises(LLMTimeoutError):
         client.generate("system", "two")
     assert client.calls == [FakeLLMCall("system", "one"), FakeLLMCall("system", "two")]
