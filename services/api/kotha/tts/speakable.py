@@ -89,7 +89,13 @@ DATA_UNIT_AFTER_NUMBER = re.compile(r"\s*(gb|mb|kb)(?![a-z])", re.IGNORECASE)
 GROUPED_NUMBER = r"(?:\d{1,3}(?:,\d{3})+|\d{1,2}(?:,\d{2})+,\d{3})(?!,?\d)"
 NUMBER = re.compile(rf"(?<![\d.])({GROUPED_NUMBER}|\d+)(?:\.(\d+))?(?!\d)")
 # a Bangla hour word already ends in টা, so a written টা, টায় or টার after the time is absorbed
-CLOCK_TIME = re.compile(r"(?<![\d:])(\d{1,2}):(\d{2})(?![\d:])(?:\s*টা(য়|র)?(?![ঀ-৿]))?")
+CLOCK_TIME = re.compile(
+    r"(?<![\d:])(\d{1,2}):(\d{2})(?![\d:])(?:\s*টা(য়|র)?(?![ঀ-৿]))?"
+    r"(?:\s?([AaPp])\.?\s?[Mm]\.?(?![A-Za-z]))?"
+)
+# a dash between two clock times is read as "to"
+CLOCK_RANGE_DASH = re.compile(r"(?<=\d:\d\d)\s*[-–]\s*(?=\d{1,2}:\d\d)")
+RANGE_WORDS: dict[Language, str] = {"bn": " থেকে ", "en": " to "}
 # the case ending after the hour word, and after মিনিট when there are minutes
 BANGLA_TIME_CASE_ENDINGS = {"য়": ("য়", "ে"), "র": ("র", "ের")}
 # each period runs until the hour given with it
@@ -208,8 +214,11 @@ def day_period(hour: int, periods: tuple[tuple[int, str], ...]) -> str:
 
 def spoken_time(match: re.Match[str], lang: Language) -> str:
     hour, minute = int(match.group(1)), int(match.group(2))
-    if hour > 23 or minute > 59:
+    meridiem = (match.group(4) or "").lower()
+    if hour > 23 or minute > 59 or (meridiem and not 1 <= hour <= 12):
         return match.group(0)
+    if meridiem:
+        hour = hour % 12 + (12 if meridiem == "p" else 0)
     clock_hour = hour % 12 or 12
     if lang == "bn":
         hour_ending, minute_ending = BANGLA_TIME_CASE_ENDINGS.get(match.group(3) or "", ("", ""))
@@ -281,6 +290,7 @@ def spoken_text(sentence: str, lang: Language) -> str:
     text = EMPHASIS.sub(" ", text)
     text = HYPHEN_BEFORE_BANGLA_SUFFIX.sub("", text)
     text = CODE.sub(lambda match: spoken_code(match.group(0), lang), text)
+    text = CLOCK_RANGE_DASH.sub(RANGE_WORDS[lang], text)
     text = CLOCK_TIME.sub(lambda match: spoken_time(match, lang), text)
     text = spoken_numbers(text, lang)
     text = DIGITS.sub(lambda match: f" {digit_by_digit(match.group(0), lang)} ", text)

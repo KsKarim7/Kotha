@@ -126,6 +126,7 @@ class CallSession:
         self._turns: asyncio.Queue[np.ndarray] = asyncio.Queue(maxsize=1)
         self._outgoing: asyncio.Queue[Outgoing] = asyncio.Queue(maxsize=OUTGOING_LIMIT)
         self._bad_messages = 0
+        self._timed_out = False
         self._failed_turns = 0
         self._lang: Language = GREETING_LANG
         self.call_id = f"call-{secrets.token_hex(4)}"
@@ -156,6 +157,7 @@ class CallSession:
                     message = await self._websocket.receive()
             except TimeoutError:
                 log_event("call_timeout", call_id=self.call_id, reason="client_silent")
+                self._timed_out = True
                 await self._outgoing.put(Close(GOING_AWAY))
                 return
             if message["type"] == "websocket.disconnect":
@@ -338,7 +340,9 @@ class CallSession:
             except WebSocketDisconnect as disconnect:
                 raise CallEnded from disconnect
             except TimeoutError:
-                log_event("call_timeout", call_id=self.call_id, reason="client_not_reading")
+                # a silent client that also stopped reading was already logged once
+                if not self._timed_out:
+                    log_event("call_timeout", call_id=self.call_id, reason="client_not_reading")
                 raise CallEnded from None
 
     async def _deliver(self, item: Outgoing) -> None:

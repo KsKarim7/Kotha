@@ -645,6 +645,30 @@ def test_a_client_that_stops_reading_ends_the_call_instead_of_blocking(
     assert any(message.startswith("event=call_ended") for message in caplog.messages)
 
 
+class SilentUnreadSocket(UnreadSocket):
+    async def receive(self) -> dict[str, Any]:
+        await self.never_drained.wait()
+        return {}
+
+
+def test_a_client_both_silent_and_not_reading_is_logged_once(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr("kotha.api.session.CLIENT_SILENCE_TIMEOUT_S", 0.2)
+    monkeypatch.setattr("kotha.api.session.SEND_TIMEOUT_S", 0.4)
+    caplog.set_level(logging.INFO, logger="kotha")
+    services = CallServices(lambda: loud_probability, FakeAsr(), FakePipeline(), FakeTts())
+    session = CallSession(SilentUnreadSocket(), services)
+
+    async def run_briefly() -> None:
+        async with asyncio.timeout(5):
+            await session.run()
+
+    asyncio.run(run_briefly())
+    timeouts = [message for message in caplog.messages if "event=call_timeout" in message]
+    assert len(timeouts) == 1 and "reason=client_silent" in timeouts[0]
+
+
 class SilentTts(FakeTts):
     async def speak(self, text: str, lang: Language) -> AsyncIterator[np.ndarray]:
         self.spoken.append((text, lang))
