@@ -29,6 +29,7 @@ from retrieval import (
     read_testset,
     score,
 )
+from split_testset import assign_splits
 from tracking import open_store
 
 PACKAGE_CODES = (
@@ -73,6 +74,37 @@ def test_the_committed_set_has_enough_questions_per_language() -> None:
     counts = Counter(question.lang for question in QUESTIONS)
     assert len(QUESTIONS) >= 60
     assert all(counts[lang] >= 15 for lang in ("bn", "en", "mix"))
+
+
+def test_the_committed_split_is_the_seeded_one_and_balanced() -> None:
+    with TESTSET_PATH.open(newline="", encoding="utf-8") as testset_file:
+        rows = list(csv.DictReader(testset_file))
+    assert {row["id"]: row["split"] for row in rows} == assign_splits(rows)
+    splits = Counter(question.split for question in QUESTIONS)
+    assert splits == {"dev": 36, "test": 36}
+    for lang in ("bn", "en", "mix"):
+        dev = sum(q.split == "dev" for q in QUESTIONS if q.lang == lang)
+        assert 10 <= dev <= 14, lang
+    for doc_id in KB_DOC_IDS:
+        assert {q.split for q in QUESTIONS if q.doc_id == doc_id} == {"dev", "test"}, doc_id
+
+
+def test_read_testset_refuses_an_unknown_split(tmp_path: Path) -> None:
+    path = tmp_path / "set.csv"
+    path.write_text("id,lang,doc_id,question,split\nq1,en,roaming,abroad,train\n", "utf-8")
+    with pytest.raises(ValueError, match="unknown split"):
+        read_testset(path, {"roaming"})
+
+
+def test_scores_and_metric_names_are_given_per_split_too() -> None:
+    dev = Question("q1", "en", "balance", "x", "dev")
+    test = Question("q2", "en", "balance", "y", "test")
+    results = [QuestionResult(dev, "dense", 1), QuestionResult(test, "dense", None)]
+    by_split = {(s.split, s.lang): s.hit_at_3 for s in score(results) if s.retriever == "dense"}
+    assert by_split[("all", "all")] == 0.5
+    assert (by_split[("dev", "en")], by_split[("test", "en")]) == (1.0, 0.0)
+    metrics = group_metrics(score(results))
+    assert metrics["dense.all.hit_at_3"] == 0.5 and metrics["dense.dev.en.hit_at_3"] == 1.0
 
 
 def test_every_document_is_asked_about_in_every_language() -> None:
@@ -237,8 +269,8 @@ def test_main_prints_scores_and_writes_one_row_per_question_and_retriever(
 ) -> None:
     main(cli)
     printed = capsys.readouterr().out.splitlines()
-    assert printed[0] == "retriever\tlang\tn\thit@3\tmrr"
-    assert any(line.startswith(f"dense\tall\t{len(QUESTIONS)}\t") for line in printed)
+    assert printed[0] == "split\tretriever\tlang\tn\thit@3\tmrr"
+    assert any(line.startswith(f"all\tdense\tall\t{len(QUESTIONS)}\t") for line in printed)
     with (tmp_path / "out" / "retrieval.csv").open(encoding="utf-8", newline="") as csv_file:
         rows = list(csv.DictReader(csv_file))
     assert len(rows) == 4 * len(QUESTIONS)
