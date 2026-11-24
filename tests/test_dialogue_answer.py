@@ -27,7 +27,7 @@ from kotha.llm.client import (
     LLMTimeoutError,
     LLMUnavailableError,
 )
-from kotha.llm.fake import FakeLLMClient
+from kotha.llm.fake import FAKE_MODEL, FakeLLMClient
 from kotha.rag.citations import split_sentences
 from kotha.rag.retriever import RetrievedChunk
 
@@ -193,6 +193,17 @@ def test_a_rejection_before_another_handoff_is_kept(
     pipeline, _, _ = pipeline_for(["No citation here.", second])
     reply = pipeline.reply("what do I bring to replace my SIM")
     assert (reply.handoff_reason, reply.rejections) == (reason, (Rejection.MISSING_CITATION,))
+
+
+def test_a_reply_names_the_model_of_its_last_generation_and_none_without_one() -> None:
+    pipeline, _, _ = pipeline_for([GOOD_EN])
+    assert pipeline.reply("what do I bring to replace my SIM").model == FAKE_MODEL
+    pipeline, _, _ = pipeline_for(["NO_ANSWER"])
+    assert pipeline.reply("what is the weather in Dhaka").model == FAKE_MODEL
+    pipeline, _, _ = pipeline_for([LLMTimeoutError("slow")])
+    assert pipeline.reply("what do I bring to replace my SIM").model is None
+    pipeline, llm, _ = pipeline_for([])
+    assert pipeline.reply("what is my balance").model is None and llm.calls == []
 
 
 def test_an_answer_and_other_handoffs_carry_no_rejections() -> None:

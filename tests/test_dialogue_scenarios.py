@@ -17,7 +17,8 @@ from kotha.dialogue.scenarios import (
 from kotha.kb.chunks import chunk_documents
 from kotha.kb.documents import read_documents
 from kotha.kb.ingest import KB_FOLDER
-from kotha.llm.fake import FakeLLMCall
+from kotha.llm.client import Generation
+from kotha.llm.fake import FAKE_MODEL, FakeLLMCall
 from kotha.rag.retriever import RetrievedChunk, SparseRetriever
 from kotha.text.lexicon import LEXICON_PATH, read_lexicon
 
@@ -40,12 +41,12 @@ class CiteEveryPassageLLM:
     def __init__(self) -> None:
         self.calls: list[FakeLLMCall] = []
 
-    def generate(self, system_prompt: str, user_prompt: str) -> str:
+    def generate(self, system_prompt: str, user_prompt: str) -> Generation:
         self.calls.append(FakeLLMCall(system_prompt, user_prompt))
         citations = " ".join(f"[{chunk_id}]" for chunk_id in PASSAGE_ID.findall(user_prompt))
         if "Reply language: Bangla" in user_prompt:
-            return f"নিয়মটি এখানে আছে {citations}।"
-        return f"The rule is here {citations}."
+            return Generation(f"নিয়মটি এখানে আছে {citations}।", FAKE_MODEL)
+        return Generation(f"The rule is here {citations}.", FAKE_MODEL)
 
 
 def answer_from(doc_id: str, lang: str = "en") -> BotReply:

@@ -197,6 +197,7 @@ class BotReply:
     handoff_reason: HandoffReason | None = None
     rejections: tuple[Rejection, ...] = ()
     stage_seconds: Mapping[str, float] = field(default_factory=dict, compare=False)
+    model: str | None = field(default=None, compare=False)
 
 
 def fixed_reply(kind: ReplyKind, lang: Language) -> BotReply:
@@ -283,8 +284,10 @@ class AnswerPipeline:
 
     def reply(self, question: str) -> BotReply:
         stage_seconds: dict[str, float] = {}
-        reply = self._reply(question, stage_seconds)
-        return replace(reply, stage_seconds=stage_seconds)
+        models: list[str] = []
+        reply = self._reply(question, stage_seconds, models)
+        # the model of the last generation, whose text decided the reply
+        return replace(reply, stage_seconds=stage_seconds, model=models[-1] if models else None)
 
     def _search(self, question: str, stage_seconds: dict[str, float]) -> list[RetrievedChunk]:
         started = time.perf_counter()
@@ -293,15 +296,17 @@ class AnswerPipeline:
         finally:
             stage_seconds["retrieval"] = time.perf_counter() - started
 
-    def _generate(self, prompt: str, stage_seconds: dict[str, float]) -> str:
+    def _generate(self, prompt: str, stage_seconds: dict[str, float], models: list[str]) -> str:
         started = time.perf_counter()
         try:
-            return self._llm.generate(SYSTEM_PROMPT, prompt)
+            generation = self._llm.generate(SYSTEM_PROMPT, prompt)
+            models.append(generation.model)
+            return generation.text
         finally:
             elapsed = time.perf_counter() - started
             stage_seconds["llm"] = stage_seconds.get("llm", 0.0) + elapsed
 
-    def _reply(self, question: str, stage_seconds: dict[str, float]) -> BotReply:
+    def _reply(self, question: str, stage_seconds: dict[str, float], models: list[str]) -> BotReply:
         lang = caller_language(question)
         if is_account_request(question):
             return fixed_reply(ReplyKind.ACCOUNT_UNAVAILABLE, lang)
@@ -322,7 +327,7 @@ class AnswerPipeline:
                 return handoff(lang, HandoffReason.NO_TIME_TO_RETRY, broken_rules)
             prompt = user_prompt(question, lang, list(chunks.values()), rejections)
             try:
-                answer = self._generate(prompt, stage_seconds)
+                answer = self._generate(prompt, stage_seconds, models)
             except LLMError as error:
                 return handoff(lang, llm_failure_reason(error), broken_rules)
             if NO_ANSWER in answer:

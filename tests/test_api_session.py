@@ -85,7 +85,9 @@ class FakePipeline:
             Source("sim-replacement.en.1", "sim-replacement", "Replacing a SIM"),
             Source("service-hours.en.0", "service-hours", "Service hours"),
         )
-        return BotReply(ReplyKind.ANSWER, "en", "Visit a service centre.", sources)
+        return BotReply(
+            ReplyKind.ANSWER, "en", "Visit a service centre.", sources, model="gemini-x"
+        )
 
 
 class FakeTts:
@@ -414,6 +416,15 @@ def test_an_answer_is_logged_without_a_reason(caplog: pytest.LogCaptureFixture) 
         events_until(websocket, "reply_audio_end")
     [reply_log] = [message for message in caplog.messages if message.startswith("event=reply")]
     assert "kind=answer" in reply_log and "reason=" not in reply_log
+    assert "model=gemini-x" in reply_log
+
+
+def test_the_timing_event_names_the_answering_model() -> None:
+    with call() as websocket:
+        started(websocket)
+        say(websocket)
+        timing = first(events_until(websocket, "timing"), "timing")
+    assert timing["model"] == "gemini-x"
 
 
 def test_turns_that_arrive_while_the_bot_is_busy_keep_only_the_latest_waiting(

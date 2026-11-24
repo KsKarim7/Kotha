@@ -1,4 +1,11 @@
+from dataclasses import dataclass
 from typing import Protocol
+
+
+@dataclass(frozen=True)
+class Generation:
+    text: str
+    model: str
 
 
 class LLMError(Exception):
@@ -34,4 +41,4 @@ class LLMUnavailableError(LLMTransientError):
 
 
 class LLMClient(Protocol):
-    def generate(self, system_prompt: str, user_prompt: str) -> str: ...
+    def generate(self, system_prompt: str, user_prompt: str) -> Generation: ...

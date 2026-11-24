@@ -51,6 +51,7 @@ RESULT_COLUMNS = (
     *STAGES,
     "handoff_reason",
     "rejections",
+    "model",
 )
 START = json.dumps({"type": "start", "sample_rate": 16000, "consent": True})
 
@@ -62,6 +63,7 @@ class TurnResult:
     kind: str = ""
     handoff_reason: str = ""
     rejections: str = ""
+    model: str = ""
     split: bool = False
     failure: str = ""
     stages: dict[str, float] = field(default_factory=dict)
@@ -182,6 +184,7 @@ async def speak_and_listen(
                 timing = event
                 result.handoff_reason = event.get("handoff_reason") or ""
                 result.rejections = ";".join(event.get("rejections", []))
+                result.model = event.get("model") or ""
     finally:
         silence_task.cancel()
         await asyncio.gather(silence_task, return_exceptions=True)
@@ -269,7 +272,8 @@ def write_results(path: Path, results: Sequence[TurnResult]) -> None:
                 f"{result.stages[stage]:.4f}" if stage in result.stages else "" for stage in STAGES
             ]
             row = [result.question_id, result.lang, result.kind, result.split, result.failure]
-            writer.writerow([*row, *stages, result.handoff_reason, result.rejections])
+            extra = [result.handoff_reason, result.rejections, result.model]
+            writer.writerow([*row, *stages, *extra])
 
 
 def print_summary(summary: Mapping[str, tuple[int, float, float]]) -> None:
@@ -358,6 +362,8 @@ def main() -> None:
         metrics.update({f"replies.{kind}": count for kind, count in kinds.items()})
         metrics.update({f"failures.{failure}": count for failure, count in failed.items()})
         metrics.update({f"handoffs.{reason}": count for reason, count in reasons.items()})
+        models = Counter(result.model for result in results if result.model)
+        metrics.update({f"models.{model}": count for model, count in models.items()})
         metrics["startup_seconds"] = readiness.startup_seconds
         if cold_start_seconds is not None:
             metrics["cold_start_seconds"] = cold_start_seconds
