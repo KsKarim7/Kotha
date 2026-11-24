@@ -228,6 +228,9 @@ def test_stars_and_hashes_are_spoken_only_inside_a_code_with_digits(
         ("Call at 12:30 PM.", "en", "call at twelve thirty in the afternoon"),
         ("At 9:30 a meeting.", "en", "at nine thirty in the morning a meeting"),
         ("At 18:00 PM.", "en", "at eighteen zero zero pee em"),
+        ("Open 9:00 AM - 5:00 PM.", "en", "open nine in the morning to five in the evening"),
+        ("Open 9:30am.", "en", "open nine thirty in the morning"),
+        ("১০:০০টা-১২:০০টা খোলা", "bn", "সকাল দশটা থেকে দুপুর বারোটা খোলা"),
         ("Score 25:70.", "en", "score twenty five seventy"),
     ],
 )
